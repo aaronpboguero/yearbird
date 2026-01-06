@@ -39,7 +39,7 @@ export function AuthenticatedLayout({
       <header className="relative z-30 flex flex-none items-center border-b border-zinc-200/60 bg-white/70 px-4 py-2 backdrop-blur">
         <div className="flex w-full items-center gap-3 rounded-full border border-zinc-200/70 bg-white/90 px-3 py-1.5 shadow-sm backdrop-blur">
           <div className="flex items-center gap-2.5 shrink-0">
-            <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f985.svg" alt="Yearbird" className="h-5 w-5" />
+            <img src="/eagle.svg" alt="Yearbird" className="h-5 w-5" />
             <h1 className="text-base font-medium font-display text-zinc-900">Yearbird</h1>
             {error ? (
               <span
