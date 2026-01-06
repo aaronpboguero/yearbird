@@ -28,18 +28,15 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body class="m-0 p-0">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-
-    <!-- Fallback content for crawlers that don't execute JavaScript -->
-    <noscript>
+    <!-- Pre-render content for crawlers - React replaces this on hydration -->
+    <div id="root">
       <div style="max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: system-ui, sans-serif;">
         <h1>Yearbird</h1>
         <p><strong>Plan a year worth winning.</strong></p>
-        <p>Yearbird turns your Google Calendar into a giant year-at-a-glance map with 365 days on one bold screen. It is built for founders, athletes, creators, students, and anyone chasing an ambitious year who wants to stay focused and in control.</p>
-        <h2>Features</h2>
+        <p>Yearbird is a calendar visualization app that turns your Google Calendar into a giant year-at-a-glance map with 365 days on one bold screen. It is built for founders, athletes, creators, students, and anyone chasing an ambitious year who wants to stay focused and in control.</p>
+        <h2>What Yearbird Does</h2>
         <ul>
-          <li>365-day year view of your Google Calendar</li>
+          <li>Displays your entire year of Google Calendar events in one view</li>
           <li>Color-coded categories for goals, projects, and life events</li>
           <li>Read-only access - Yearbird cannot modify your calendar</li>
           <li>Privacy-first: Your data never leaves your browser</li>
@@ -48,8 +45,9 @@
         <h2>Privacy</h2>
         <p>Yearbird is a client-side application. Your calendar data is processed entirely in your browser and never sent to our servers. We don't collect, store, or have access to your personal data.</p>
         <p><a href="/privacy.html">Privacy Policy</a> | <a href="/terms.html">Terms of Service</a></p>
-        <p>Please enable JavaScript to use Yearbird.</p>
+        <noscript><p>Please enable JavaScript to use Yearbird.</p></noscript>
       </div>
-    </noscript>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
