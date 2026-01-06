@@ -624,7 +624,7 @@ export function LandingPage({
                 onClick={onSignIn}
                 disabled={!isReady}
                 aria-busy={isSigningIn}
-                className="inline-flex items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+                className="relative inline-flex items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <svg aria-hidden="true" viewBox="0 0 48 48" className="h-6 w-6">
                   <path
@@ -645,13 +645,11 @@ export function LandingPage({
                   />
                 </svg>
                 <span>Sign in with Google</span>
-                <span
-                  className={`flex h-5 w-5 items-center justify-center ${
-                    isSigningIn ? 'opacity-100' : 'opacity-0'
-                  }`}
-                >
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
-                </span>
+                {isSigningIn ? (
+                  <span className="absolute right-4 flex h-5 w-5 items-center justify-center">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
+                  </span>
+                ) : null}
               </button>
               <p className="text-xs text-zinc-400">
                 <a
@@ -765,7 +763,7 @@ export function LandingPage({
               onClick={onSignIn}
               disabled={!isReady}
               aria-busy={isSigningIn}
-              className="inline-flex items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+              className="relative inline-flex items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <svg aria-hidden="true" viewBox="0 0 48 48" className="h-6 w-6">
                 <path
@@ -786,13 +784,11 @@ export function LandingPage({
                 />
               </svg>
               <span>Sign in with Google</span>
-              <span
-                className={`flex h-5 w-5 items-center justify-center ${
-                  isSigningIn ? 'opacity-100' : 'opacity-0'
-                }`}
-              >
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
-              </span>
+              {isSigningIn ? (
+                <span className="absolute right-4 flex h-5 w-5 items-center justify-center">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
+                </span>
+              ) : null}
             </button>
             <p className="text-xs text-zinc-500">
               Read-only access · Your data never leaves your browser
