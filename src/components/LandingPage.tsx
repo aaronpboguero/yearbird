@@ -664,6 +664,11 @@ export function LandingPage({
                 </a>
                 {' - Your data never leaves your browser.'}
               </p>
+              <p className="text-xs text-zinc-400">
+                <a href="/privacy.html" className="underline decoration-zinc-300 underline-offset-2 transition hover:text-zinc-600">Privacy Policy</a>
+                <span className="mx-2">&middot;</span>
+                <a href="/terms.html" className="underline decoration-zinc-300 underline-offset-2 transition hover:text-zinc-600">Terms of Service</a>
+              </p>
             </div>
           </div>
         </section>
