@@ -592,7 +592,7 @@ export function LandingPage({
             </span>
 
             <div className="mt-8 flex flex-col items-center gap-3">
-              <div className="float-bird text-5xl">🐦</div>
+              <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f985.svg" alt="Yearbird" className="float-bird h-12 w-12" />
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.32em] text-zinc-400">
                   Yearbird
