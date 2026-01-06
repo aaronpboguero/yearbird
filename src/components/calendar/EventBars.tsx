@@ -102,9 +102,10 @@ function EventBarItem({
   onMove,
   onLeave,
 }: EventBarItemProps) {
+  // In scrollable mode, use density-based sizing; otherwise use CSS variable for TV scaling
   const barFontSize = isScrollable
-    ? SCROLL_BAR_FONT_MIN + densityScale * (SCROLL_BAR_FONT_MAX - SCROLL_BAR_FONT_MIN)
-    : 10
+    ? `${SCROLL_BAR_FONT_MIN + densityScale * (SCROLL_BAR_FONT_MAX - SCROLL_BAR_FONT_MIN)}px`
+    : 'var(--tv-event-bar-font)'
   const left = ((bar.startDay - 1) / DAY_COLUMN_COUNT) * 100
   const width = ((bar.endDay - bar.startDay + 1) / DAY_COLUMN_COUNT) * 100
   const top = bar.row * (rowHeightPercent + ROW_GAP_PERCENT)
@@ -156,7 +157,7 @@ function EventBarItem({
         )}
         style={{
           backgroundColor: bar.event.color,
-          fontSize: `${barFontSize}px`,
+          fontSize: barFontSize,
         }}
         role="button"
         tabIndex={0}

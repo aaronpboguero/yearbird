@@ -83,7 +83,7 @@ describe('YearGrid', () => {
 
     expect(container.querySelectorAll('.bg-zinc-100')).toHaveLength(7)
     expect(container.querySelectorAll('.bg-zinc-50').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('.ring-sky-500')).toHaveLength(1)
+    expect(container.querySelectorAll('.today-ring')).toHaveLength(1)
     expect(container.querySelectorAll('[aria-current="date"]')).toHaveLength(1)
 
     vi.useRealTimers()

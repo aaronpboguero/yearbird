@@ -3,6 +3,44 @@
 :root {
   --font-display: 'Fraunces', 'Times New Roman', serif;
   --font-body: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+
+  /* TV/Large Screen Scaling - base values */
+  --tv-month-label: 0.625rem;      /* 10px */
+  --tv-day-header: 0.625rem;       /* 10px */
+  --tv-day-header-height: 1.5rem;  /* 24px */
+  --tv-grid-gap: 1px;
+  --tv-month-column: 3rem;         /* 48px */
+  --tv-today-ring: 2px;
+  --tv-event-bar-font: 10px;
+  --tv-header-padding: 0.5rem;
+}
+
+/* 4K displays (2560px+) - scale up ~1.5x */
+@media (min-width: 2560px) {
+  :root {
+    --tv-month-label: 0.875rem;      /* 14px */
+    --tv-day-header: 0.875rem;       /* 14px */
+    --tv-day-header-height: 2.25rem; /* 36px */
+    --tv-grid-gap: 2px;
+    --tv-month-column: 4.5rem;       /* 72px */
+    --tv-today-ring: 3px;
+    --tv-event-bar-font: 14px;
+    --tv-header-padding: 0.75rem;
+  }
+}
+
+/* 5K/8K displays (3840px+) - scale up ~2x */
+@media (min-width: 3840px) {
+  :root {
+    --tv-month-label: 1.125rem;      /* 18px */
+    --tv-day-header: 1.125rem;       /* 18px */
+    --tv-day-header-height: 3rem;    /* 48px */
+    --tv-grid-gap: 3px;
+    --tv-month-column: 6rem;         /* 96px */
+    --tv-today-ring: 4px;
+    --tv-event-bar-font: 18px;
+    --tv-header-padding: 1rem;
+  }
 }
 
 body {
@@ -18,6 +56,11 @@ body {
 
   .font-display {
     font-family: var(--font-display);
+  }
+
+  /* Today ring that scales with TV breakpoints */
+  .today-ring {
+    box-shadow: inset 0 0 0 var(--tv-today-ring) rgb(14 165 233); /* sky-500 */
   }
 }
 

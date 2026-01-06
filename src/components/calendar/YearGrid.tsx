@@ -289,14 +289,24 @@ function MonthRow({
 
   return (
     <div className={clsx('flex min-h-0', className)} style={style}>
-      <div className="flex w-12 flex-none items-center justify-end pr-2">
-        <span className="text-[10px] font-semibold text-zinc-500 md:text-xs">
+      <div
+        className="flex flex-none items-center justify-end pr-2"
+        style={{ width: 'var(--tv-month-column)' }}
+      >
+        <span
+          className="font-semibold text-zinc-500"
+          style={{ fontSize: 'var(--tv-month-label)' }}
+        >
           {monthName}
         </span>
       </div>
 
       <div className="relative flex-1 min-h-0">
-        <div ref={gridRef} className="grid h-full grid-cols-31 gap-px bg-zinc-200/70">
+        <div
+          ref={gridRef}
+          className="grid h-full grid-cols-31 bg-zinc-200/70"
+          style={{ gap: 'var(--tv-grid-gap)' }}
+        >
           {Array.from({ length: DAY_COLUMN_COUNT }, (_, dayIndex) => {
             const day = dayIndex + 1
             const isValidDay = day <= daysInMonth
@@ -433,7 +443,7 @@ function DayCell({
           'relative block h-full w-full cursor-pointer border border-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-500',
           weekend ? 'bg-zinc-50' : 'bg-white',
           isPast && 'opacity-60',
-          isTodayDate && 'border-sky-500/80 ring-2 ring-inset ring-sky-500'
+          isTodayDate && 'border-sky-500/80 today-ring'
         )}
         data-date={dateKey}
         href={url}

@@ -14,12 +14,19 @@ export function DayHeader({ className }: DayHeaderProps) {
         className
       )}
     >
-      <div className="w-12 flex-none bg-white/95" />
-      <div className="grid flex-1 grid-cols-31 gap-px bg-zinc-200/70">
+      <div className="flex-none bg-white/95" style={{ width: 'var(--tv-month-column)' }} />
+      <div
+        className="grid flex-1 grid-cols-31 bg-zinc-200/70"
+        style={{ gap: 'var(--tv-grid-gap)' }}
+      >
         {Array.from({ length: DAY_COLUMN_COUNT }, (_, index) => (
           <div
             key={index}
-            className="flex h-6 items-center justify-center bg-white px-0.5 text-[10px] font-medium text-zinc-400 md:h-auto md:py-1 md:text-xs"
+            className="flex items-center justify-center bg-white px-0.5 font-medium text-zinc-400 md:py-1"
+            style={{
+              height: 'var(--tv-day-header-height)',
+              fontSize: 'var(--tv-day-header)',
+            }}
           >
             <span className="hidden md:inline">{index + 1}</span>
           </div>
