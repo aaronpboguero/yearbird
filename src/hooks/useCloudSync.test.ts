@@ -138,7 +138,7 @@ describe('useCloudSync', () => {
   })
 
   it('syncNow is callable and returns false when not enabled', async () => {
-    const { isSyncEnabled, performSync } = await import('../services/syncManager')
+    const { isSyncEnabled } = await import('../services/syncManager')
     vi.mocked(isSyncEnabled).mockReturnValue(false)
 
     const { result } = renderHook(() => useCloudSync())
@@ -177,7 +177,7 @@ describe('useCloudSync', () => {
     vi.mocked(getLastSyncError).mockReturnValue(null)
     vi.mocked(hasDriveScope).mockReturnValue(true)
 
-    const { result } = renderHook(() => useCloudSync())
+    renderHook(() => useCloudSync())
 
     // Simulate storage event
     await act(async () => {
@@ -196,7 +196,7 @@ describe('useCloudSync', () => {
   it('ignores storage events for other keys', async () => {
     const { getSyncStatus } = await import('../services/syncManager')
 
-    const { result } = renderHook(() => useCloudSync())
+    renderHook(() => useCloudSync())
 
     const callCount = vi.mocked(getSyncStatus).mock.calls.length
 
