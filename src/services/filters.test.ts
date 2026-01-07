@@ -116,4 +116,55 @@ describe('filters service', () => {
     expect(getFilters()).toEqual([])
     expect(localStorage.getItem('yearbird:filters')).toBeNull()
   })
+
+  it('returns empty when storage is unavailable', () => {
+    // Simulate storage being unavailable
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new Error('Storage unavailable')
+    })
+
+    expect(getFilters()).toEqual([])
+
+    vi.restoreAllMocks()
+  })
+
+  it('handles removeFilter when storage is unavailable', () => {
+    // Simulate storage being unavailable
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new Error('Storage unavailable')
+    })
+
+    // Should not throw
+    removeFilter('some-id')
+
+    vi.restoreAllMocks()
+  })
+
+  it('handles clearFilters when storage is unavailable', () => {
+    // Simulate storage being unavailable
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new Error('Storage unavailable')
+    })
+
+    // Should not throw
+    clearFilters()
+
+    vi.restoreAllMocks()
+  })
+
+  it('drops invalid filter objects from stored data', () => {
+    localStorage.setItem(
+      'yearbird:filters',
+      JSON.stringify([
+        { id: '1', pattern: 'rent', createdAt: Date.now() },
+        { id: '2', pattern: 'invalid' }, // Missing createdAt
+        { id: '3', createdAt: Date.now() }, // Missing pattern
+        null, // Invalid entry
+      ])
+    )
+
+    // Should return empty and clean up invalid data
+    expect(getFilters()).toEqual([])
+    expect(localStorage.getItem('yearbird:filters')).toBeNull()
+  })
 })

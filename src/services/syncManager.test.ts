@@ -8,6 +8,13 @@ import {
   applyCloudConfigToLocal,
   clearSyncError,
   disableSync,
+  performSync,
+  enableSync,
+  buildCloudConfigFromLocal,
+  scheduleSyncToCloud,
+  initSyncListeners,
+  handleOnline,
+  getLastSyncError,
 } from './syncManager'
 import type { CloudConfig, CloudSyncSettings } from '../types/cloudConfig'
 
@@ -341,6 +348,911 @@ describe('syncManager', () => {
       expect(settings.enabled).toBe(false)
       expect(settings.lastSyncedAt).toBeNull()
       expect(settings.deviceId).toBe('test-device')
+    })
+  })
+
+  describe('getLastSyncError', () => {
+    it('returns null initially', () => {
+      expect(getLastSyncError()).toBeNull()
+    })
+  })
+
+  describe('buildCloudConfigFromLocal', () => {
+    it('builds config from localStorage data services', async () => {
+      const { getFilters } = await import('./filters')
+      const { getDisabledCalendars } = await import('./calendarVisibility')
+      const { getDisabledBuiltInCategories } = await import('./builtInCategories')
+      const { getCustomCategories } = await import('./customCategories')
+
+      vi.mocked(getFilters).mockReturnValue([{ id: 'f1', pattern: 'test', createdAt: 1000 }])
+      vi.mocked(getDisabledCalendars).mockReturnValue(['cal-1'])
+      vi.mocked(getDisabledBuiltInCategories).mockReturnValue(['work'])
+      vi.mocked(getCustomCategories).mockReturnValue([])
+
+      saveSyncSettings({
+        enabled: true,
+        lastSyncedAt: null,
+        deviceId: 'my-device',
+      })
+
+      const config = buildCloudConfigFromLocal()
+
+      expect(config.version).toBe(1)
+      expect(config.deviceId).toBe('my-device')
+      expect(config.filters).toEqual([{ id: 'f1', pattern: 'test', createdAt: 1000 }])
+      expect(config.disabledCalendars).toEqual(['cal-1'])
+      expect(config.disabledBuiltInCategories).toEqual(['work'])
+    })
+  })
+
+  describe('performSync', () => {
+    it('returns skipped when sync is disabled', async () => {
+      const { hasDriveScope } = await import('./auth')
+      vi.mocked(hasDriveScope).mockReturnValue(false)
+
+      const result = await performSync()
+
+      expect(result.status).toBe('skipped')
+      if (result.status === 'skipped') {
+        expect(result.reason).toBe('disabled')
+      }
+    })
+
+    it('returns error when Drive access check fails while online', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(false)
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Mock navigator.onLine as true
+      const originalOnLine = navigator.onLine
+      Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('error')
+      if (result.status === 'error') {
+        expect(result.message).toContain('Cannot access Google Drive')
+      }
+
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true })
+    })
+
+    it('returns skipped when offline and Drive access fails', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(false)
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const originalOnLine = navigator.onLine
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('skipped')
+      if (result.status === 'skipped') {
+        expect(result.reason).toBe('offline')
+      }
+
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true })
+    })
+
+    it('returns error when readCloudConfig fails', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({
+        success: false,
+        error: { code: 500, message: 'Server error' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('error')
+      if (result.status === 'error') {
+        expect(result.message).toBe('Server error')
+      }
+    })
+
+    it('returns error when writeCloudConfig fails', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: false,
+        error: { code: 403, message: 'Forbidden' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('error')
+      if (result.status === 'error') {
+        expect(result.message).toBe('Forbidden')
+      }
+    })
+
+    it('returns success on successful sync with no remote data', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('success')
+    })
+
+    it('merges local and remote configs when remote exists', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+
+      const remoteConfig: CloudConfig = {
+        version: 1,
+        updatedAt: Date.now() - 1000,
+        deviceId: 'remote-device',
+        filters: [{ id: 'remote-filter', pattern: 'remote', createdAt: 1000 }],
+        disabledCalendars: ['remote-cal'],
+        disabledBuiltInCategories: [],
+        customCategories: [],
+      }
+
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: remoteConfig })
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('success')
+      expect(writeCloudConfig).toHaveBeenCalled()
+    })
+
+    it('handles unexpected errors during sync', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockRejectedValue(new Error('Unexpected error'))
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const result = await performSync()
+
+      expect(result.status).toBe('error')
+      if (result.status === 'error') {
+        expect(result.message).toBe('Unexpected error')
+      }
+    })
+
+    it('returns already-syncing when sync is in progress', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+
+      // Create a promise that we control to keep the first sync running
+      let resolveWrite: ((value: { success: true; data: { id: string; name: string; mimeType: string } }) => void) | null =
+        null
+      vi.mocked(writeCloudConfig).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveWrite = resolve
+          })
+      )
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Start first sync (will be blocked on writeCloudConfig)
+      const firstSync = performSync()
+
+      // Wait a tick for the first sync to start
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Try to start second sync while first is in progress
+      const secondResult = await performSync()
+
+      // Second sync should return "already-syncing"
+      expect(secondResult.status).toBe('skipped')
+      if (secondResult.status === 'skipped') {
+        expect(secondResult.reason).toBe('already-syncing')
+      }
+
+      // Clean up - resolve the first sync
+      resolveWrite!({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+      await firstSync
+    })
+  })
+
+  describe('enableSync', () => {
+    it('returns false when no drive scope', async () => {
+      const { hasDriveScope } = await import('./auth')
+      vi.mocked(hasDriveScope).mockReturnValue(false)
+
+      const result = await enableSync()
+
+      expect(result).toBe(false)
+    })
+
+    it('enables sync and performs initial sync', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      const result = await enableSync()
+
+      expect(result).toBe(true)
+
+      const settings = getSyncSettings()
+      expect(settings.enabled).toBe(true)
+    })
+  })
+
+  describe('getSyncStatus additional branches', () => {
+    it('returns synced when enabled and online with no error', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Perform a successful sync to clear any errors
+      await performSync()
+
+      const status = getSyncStatus()
+      expect(status).toBe('synced')
+    })
+
+    it('returns offline when sync is enabled but navigator is offline', async () => {
+      const { hasDriveScope } = await import('./auth')
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const originalOnLine = navigator.onLine
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      const status = getSyncStatus()
+      expect(status).toBe('offline')
+
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true })
+    })
+
+    it('returns error when sync has an error', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      // Make checkDriveAccess fail to set lastSyncError
+      vi.mocked(checkDriveAccess).mockResolvedValue(false)
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Perform a sync that will fail and set lastSyncError
+      await performSync()
+
+      const status = getSyncStatus()
+      expect(status).toBe('error')
+      expect(getLastSyncError()).toBe('Cannot access Google Drive')
+    })
+
+    it('returns syncing when sync is in progress', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+
+      // Create a promise that we control
+      let resolveWrite: (() => void) | null = null
+      vi.mocked(writeCloudConfig).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveWrite = () =>
+              resolve({
+                success: true,
+                data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+              })
+          })
+      )
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Start sync (will be blocked on writeCloudConfig)
+      const syncPromise = performSync()
+
+      // Wait a tick for the sync to start
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Check status while sync is in progress
+      const status = getSyncStatus()
+      expect(status).toBe('syncing')
+
+      // Clean up
+      resolveWrite!()
+      await syncPromise
+    })
+  })
+
+  describe('scheduleSyncToCloud', () => {
+    it('does nothing when sync is disabled', async () => {
+      const { hasDriveScope } = await import('./auth')
+      vi.mocked(hasDriveScope).mockReturnValue(false)
+
+      // Should not throw
+      scheduleSyncToCloud()
+
+      // Wait a bit to ensure no timer was set
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    })
+
+    it('schedules a debounced sync when enabled', async () => {
+      const { hasDriveScope } = await import('./auth')
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Call scheduleSyncToCloud - it should schedule but not immediately sync
+      scheduleSyncToCloud()
+
+      // Clear timer to avoid side effects
+      vi.clearAllTimers()
+    })
+  })
+
+  describe('initSyncListeners', () => {
+    it('returns a cleanup function', () => {
+      const cleanup = initSyncListeners()
+      expect(typeof cleanup).toBe('function')
+
+      // Call cleanup
+      cleanup()
+    })
+
+    it('adds and removes online event listener', () => {
+      const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
+      const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
+
+      const cleanup = initSyncListeners()
+
+      expect(addEventListenerSpy).toHaveBeenCalledWith('online', handleOnline)
+
+      cleanup()
+
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('online', handleOnline)
+
+      addEventListenerSpy.mockRestore()
+      removeEventListenerSpy.mockRestore()
+    })
+  })
+
+  describe('handleOnline', () => {
+    it('triggers sync when sync is enabled', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { checkDriveAccess, readCloudConfig, writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(checkDriveAccess).mockResolvedValue(true)
+      vi.mocked(readCloudConfig).mockResolvedValue({ success: true, data: null })
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      handleOnline()
+
+      // Wait for async performSync
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      // checkDriveAccess should have been called as part of performSync
+      expect(checkDriveAccess).toHaveBeenCalled()
+    })
+
+    it('does nothing when sync is disabled', async () => {
+      const { hasDriveScope } = await import('./auth')
+      vi.mocked(hasDriveScope).mockReturnValue(false)
+
+      // Should not throw
+      handleOnline()
+    })
+  })
+
+  describe('applyCloudConfigToLocal with custom categories', () => {
+    it('writes custom categories to localStorage', () => {
+      const config: CloudConfig = {
+        version: 1,
+        updatedAt: Date.now(),
+        deviceId: 'test-device',
+        filters: [],
+        disabledCalendars: [],
+        disabledBuiltInCategories: [],
+        customCategories: [
+          {
+            id: 'custom-1' as `custom-${string}`,
+            label: 'Test Category',
+            color: '#ff0000',
+            keywords: ['test'],
+            matchMode: 'any',
+            createdAt: 1000,
+            updatedAt: 1000,
+          },
+        ],
+      }
+
+      applyCloudConfigToLocal(config)
+
+      const stored = JSON.parse(localStorage.getItem('yearbird:custom-categories') || '{}')
+      expect(stored.version).toBe(1)
+      expect(stored.categories).toHaveLength(1)
+      expect(stored.categories[0].label).toBe('Test Category')
+    })
+
+    it('removes custom categories key when array is empty', () => {
+      localStorage.setItem('yearbird:custom-categories', JSON.stringify({ version: 1, categories: [{ id: 'old' }] }))
+
+      const config: CloudConfig = {
+        version: 1,
+        updatedAt: Date.now(),
+        deviceId: 'test-device',
+        filters: [],
+        disabledCalendars: [],
+        disabledBuiltInCategories: [],
+        customCategories: [],
+      }
+
+      applyCloudConfigToLocal(config)
+
+      expect(localStorage.getItem('yearbird:custom-categories')).toBeNull()
+    })
+  })
+
+  describe('scheduleSyncToCloud with fake timers', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('schedules and executes debounced write', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Schedule sync
+      scheduleSyncToCloud()
+
+      // Fast-forward past debounce timer (2000ms)
+      await vi.advanceTimersByTimeAsync(2500)
+
+      // writeCloudConfig should have been called
+      expect(writeCloudConfig).toHaveBeenCalled()
+    })
+
+    it('cancels previous timer when called multiple times', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Schedule sync multiple times
+      scheduleSyncToCloud()
+      await vi.advanceTimersByTimeAsync(1000)
+      scheduleSyncToCloud()
+      await vi.advanceTimersByTimeAsync(1000)
+      scheduleSyncToCloud()
+
+      // Fast-forward to complete the last timer
+      await vi.advanceTimersByTimeAsync(3000)
+
+      // writeCloudConfig should only be called once (debounced)
+      expect(writeCloudConfig).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not execute write when offline', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      const originalOnLine = navigator.onLine
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      // Schedule sync
+      scheduleSyncToCloud()
+
+      // Fast-forward past debounce timer
+      await vi.advanceTimersByTimeAsync(3000)
+
+      // writeCloudConfig should NOT have been called because we're offline
+      expect(writeCloudConfig).not.toHaveBeenCalled()
+
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true })
+    })
+
+    it('handles write failure and sets error', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: false,
+        error: { code: 500, message: 'Write failed' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // Schedule sync
+      scheduleSyncToCloud()
+
+      // Suppress console.warn for this test
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      // Fast-forward past debounce timer
+      await vi.advanceTimersByTimeAsync(3000)
+
+      expect(writeCloudConfig).toHaveBeenCalled()
+      expect(getLastSyncError()).toBe('Write failed')
+
+      warnSpy.mockRestore()
+    })
+
+    it('updates lastSyncedAt on successful write', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+      vi.mocked(writeCloudConfig).mockResolvedValue({
+        success: true,
+        data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      expect(getSyncSettings().lastSyncedAt).toBeNull()
+
+      // Schedule sync
+      scheduleSyncToCloud()
+
+      // Fast-forward past debounce timer
+      await vi.advanceTimersByTimeAsync(3000)
+
+      // lastSyncedAt should now be set
+      expect(getSyncSettings().lastSyncedAt).not.toBeNull()
+    })
+  })
+
+  describe('mergeConfigs additional cases', () => {
+    const baseConfig: CloudConfig = {
+      version: 1,
+      updatedAt: 1000,
+      deviceId: 'device-1',
+      filters: [],
+      disabledCalendars: [],
+      disabledBuiltInCategories: [],
+      customCategories: [],
+    }
+
+    it('keeps remote custom category when remote is newer', () => {
+      const local: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 1000,
+        customCategories: [
+          {
+            id: 'cat-1' as `custom-${string}`,
+            label: 'Local',
+            color: '#ff0000',
+            keywords: ['local'],
+            matchMode: 'any',
+            createdAt: 1000,
+            updatedAt: 1000, // Older
+          },
+        ],
+      }
+
+      const remote: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 2000,
+        customCategories: [
+          {
+            id: 'cat-1' as `custom-${string}`,
+            label: 'Remote',
+            color: '#00ff00',
+            keywords: ['remote'],
+            matchMode: 'any',
+            createdAt: 1000,
+            updatedAt: 2000, // Newer
+          },
+        ],
+      }
+
+      const merged = mergeConfigs(local, remote)
+
+      expect(merged.customCategories[0].label).toBe('Remote')
+    })
+
+    it('combines categories from both sources', () => {
+      const local: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 1000,
+        customCategories: [
+          {
+            id: 'local-only' as `custom-${string}`,
+            label: 'Local Only',
+            color: '#ff0000',
+            keywords: ['local'],
+            matchMode: 'any',
+            createdAt: 1000,
+            updatedAt: 1000,
+          },
+        ],
+      }
+
+      const remote: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 2000,
+        customCategories: [
+          {
+            id: 'remote-only' as `custom-${string}`,
+            label: 'Remote Only',
+            color: '#00ff00',
+            keywords: ['remote'],
+            matchMode: 'any',
+            createdAt: 1000,
+            updatedAt: 1000,
+          },
+        ],
+      }
+
+      const merged = mergeConfigs(local, remote)
+
+      expect(merged.customCategories).toHaveLength(2)
+      expect(merged.customCategories.map((c) => c.id)).toContain('local-only')
+      expect(merged.customCategories.map((c) => c.id)).toContain('remote-only')
+    })
+
+    it('uses remote disabledBuiltInCategories when remote is newer', () => {
+      const local: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 1000,
+        disabledBuiltInCategories: ['work'],
+      }
+
+      const remote: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 2000,
+        disabledBuiltInCategories: ['birthdays', 'holidays'],
+      }
+
+      const merged = mergeConfigs(local, remote)
+
+      expect(merged.disabledBuiltInCategories).toEqual(['birthdays', 'holidays'])
+    })
+
+    it('uses local disabledBuiltInCategories when local is newer', () => {
+      const local: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 2000,
+        disabledBuiltInCategories: ['work'],
+      }
+
+      const remote: CloudConfig = {
+        ...baseConfig,
+        updatedAt: 1000,
+        disabledBuiltInCategories: ['birthdays', 'holidays'],
+      }
+
+      const merged = mergeConfigs(local, remote)
+
+      expect(merged.disabledBuiltInCategories).toEqual(['work'])
+    })
+  })
+
+  describe('scheduleSyncToCloud concurrent writes', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('sets needsAnotherWrite when called during an active write', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+
+      // Create a promise that we control for the first write
+      let resolveFirstWrite: (() => void) | null = null
+      const firstWritePromise = new Promise<void>((resolve) => {
+        resolveFirstWrite = resolve
+      })
+
+      let writeCallCount = 0
+      vi.mocked(writeCloudConfig).mockImplementation(() => {
+        writeCallCount++
+        if (writeCallCount === 1) {
+          // First call - return promise we control
+          return firstWritePromise.then(() => ({
+            success: true,
+            data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+          }))
+        }
+        // Subsequent calls - resolve immediately
+        return Promise.resolve({
+          success: true,
+          data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+        })
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // First scheduleSyncToCloud - sets timer
+      scheduleSyncToCloud()
+
+      // Advance timer to trigger the debounced write
+      await vi.advanceTimersByTimeAsync(2500)
+
+      // At this point, performDebouncedWrite is executing and isWriting = true
+      // Call scheduleSyncToCloud again while write is in progress
+      scheduleSyncToCloud()
+
+      // Now resolve the first write
+      resolveFirstWrite!()
+      await vi.advanceTimersByTimeAsync(0) // Let the promise resolve
+
+      // After the first write completes and needsAnotherWrite was true,
+      // it should call scheduleSyncToCloud again, which sets a new timer
+      await vi.advanceTimersByTimeAsync(2500)
+
+      // Should have been called twice total (first write + second write triggered by needsAnotherWrite)
+      expect(writeCallCount).toBe(2)
+    })
+
+    it('handles multiple calls during active write correctly', async () => {
+      const { hasDriveScope } = await import('./auth')
+      const { writeCloudConfig } = await import('./driveSync')
+
+      vi.mocked(hasDriveScope).mockReturnValue(true)
+
+      // Create a promise that we control
+      let resolveWrite: (() => void) | null = null
+      let writeCallCount = 0
+
+      vi.mocked(writeCloudConfig).mockImplementation(() => {
+        writeCallCount++
+        if (writeCallCount === 1) {
+          return new Promise((resolve) => {
+            resolveWrite = () =>
+              resolve({
+                success: true,
+                data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+              })
+          })
+        }
+        return Promise.resolve({
+          success: true,
+          data: { id: 'file-123', name: 'yearbird-config.json', mimeType: 'application/json' },
+        })
+      })
+
+      saveSyncSettings({ enabled: true, lastSyncedAt: null, deviceId: 'test' })
+
+      // First scheduleSyncToCloud
+      scheduleSyncToCloud()
+      await vi.advanceTimersByTimeAsync(2500)
+
+      // Call scheduleSyncToCloud multiple times while write is in progress
+      scheduleSyncToCloud()
+      scheduleSyncToCloud()
+      scheduleSyncToCloud()
+
+      // Resolve the first write
+      resolveWrite!()
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Even though called 3 times, needsAnotherWrite is just a boolean flag
+      // So only one additional write should be triggered
+      await vi.advanceTimersByTimeAsync(2500)
+
+      // Should only be 2 writes: first + one triggered by needsAnotherWrite
+      expect(writeCallCount).toBe(2)
+    })
+  })
+
+  describe('initSyncListeners SSR', () => {
+    it('returns noop cleanup when window is undefined', async () => {
+      // Store the original window object
+      const originalWindow = globalThis.window
+
+      // Remove window to simulate SSR
+      // @ts-expect-error - intentionally deleting window for SSR test
+      delete globalThis.window
+
+      // Re-import the module to get fresh exports
+      vi.resetModules()
+      const { initSyncListeners: initSyncListenersSSR } = await import('./syncManager')
+
+      const cleanup = initSyncListenersSSR()
+
+      // Should return a function
+      expect(typeof cleanup).toBe('function')
+
+      // Calling cleanup should not throw
+      cleanup()
+
+      // Restore window
+      globalThis.window = originalWindow
+
+      // Reset modules again to restore normal behavior
+      vi.resetModules()
     })
   })
 })
