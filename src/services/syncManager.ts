@@ -1,10 +1,10 @@
 /**
- * Sync Manager - Orchestrates synchronization between localStorage and Google Drive.
+ * Sync Manager - Orchestrates synchronization between in-memory state and Google Drive.
  *
- * Sync Strategy: "Drive as primary, localStorage as cache"
- * - On app load: Fetch from Drive, update localStorage cache
- * - On user action: Write to both (localStorage immediately, Drive async)
- * - Offline: Fall back to localStorage, queue Drive writes for later
+ * Sync Strategy: "Drive as primary, in-memory as working state"
+ * - On app load: Fetch from Drive, populate in-memory state
+ * - On user action: Update in-memory state, write to Drive async
+ * - Offline: In-memory state only, queue Drive writes for later
  * - Drive unavailable: Graceful degradation, user notified
  */
 
@@ -19,9 +19,9 @@ import type {
 import { DEFAULT_CATEGORIES } from '../config/categories'
 import { hasDriveScope } from './auth'
 import { readCloudConfig, writeCloudConfig, checkDriveAccess, deleteCloudConfig } from './driveSync'
-import { getFilters } from './filters'
-import { getDisabledCalendars } from './calendarVisibility'
-import { getCategories } from './categories'
+import { getFilters, setFilters } from './filters'
+import { getDisabledCalendars, setDisabledCalendars } from './calendarVisibility'
+import { getCategories, setCategories } from './categories'
 import {
   getShowTimedEvents,
   setShowTimedEvents,
@@ -194,7 +194,7 @@ export function isEmptyConfig(config: CloudConfig): boolean {
 }
 
 /**
- * Build a CloudConfig v2 from current localStorage state
+ * Build a CloudConfig v2 from current in-memory state
  */
 export function buildCloudConfigFromLocal(): CloudConfigV2 {
   const settings = getSyncSettings()
@@ -273,6 +273,8 @@ export function migrateV1ToV2(config: CloudConfigV1): CloudConfigV2 {
     filters: config.filters,
     disabledCalendars: config.disabledCalendars,
     categories,
+    showTimedEvents: config.showTimedEvents,
+    matchDescription: config.matchDescription,
   }
 }
 
@@ -362,67 +364,48 @@ export function mergeConfigs(
 }
 
 /**
- * Apply cloud config to localStorage.
+ * Apply cloud config to in-memory state.
  * Migrates v1 configs to v2 format before applying.
- * Writes to the unified categories storage key.
+ * Populates all in-memory services with cloud data.
  */
 export function applyCloudConfigToLocal(config: CloudConfig): void {
-  try {
-    // Ensure v2 format
-    const v2Config = ensureV2(config)
+  // Ensure v2 format
+  const v2Config = ensureV2(config)
 
-    // Write filters
-    if (v2Config.filters.length > 0) {
-      localStorage.setItem('yearbird:filters', JSON.stringify(v2Config.filters))
-    } else {
-      localStorage.removeItem('yearbird:filters')
-    }
+  // Update filters in-memory
+  setFilters(v2Config.filters)
 
-    // Write disabled calendars
-    if (v2Config.disabledCalendars.length > 0) {
-      localStorage.setItem('yearbird:disabled-calendars', JSON.stringify(v2Config.disabledCalendars))
-    } else {
-      localStorage.removeItem('yearbird:disabled-calendars')
-    }
+  // Update disabled calendars in-memory
+  setDisabledCalendars(v2Config.disabledCalendars)
 
-    // Write unified categories (v2 format)
-    // Must wrap in StoredCategories format that getCategories() expects
-    const storedCategories = {
-      version: 1, // Local storage version (not cloud config version)
-      categories: v2Config.categories.map((cat) => ({
-        id: cat.id,
-        label: cat.label,
-        color: cat.color,
-        keywords: cat.keywords,
-        matchMode: cat.matchMode,
-        createdAt: cat.createdAt,
-        updatedAt: cat.updatedAt,
-        isDefault: cat.isDefault ?? false,
-      })),
-    }
-    localStorage.setItem('yearbird:categories', JSON.stringify(storedCategories))
+  // Update categories in-memory
+  setCategories(
+    v2Config.categories.map((cat) => ({
+      id: cat.id,
+      label: cat.label,
+      color: cat.color,
+      keywords: cat.keywords,
+      matchMode: cat.matchMode,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+      isDefault: cat.isDefault ?? false,
+    }))
+  )
 
-    // Clean up legacy keys (they will be migrated on next read if needed)
-    localStorage.removeItem('yearbird:disabled-built-in-categories')
-    localStorage.removeItem('yearbird:custom-categories')
-
-    // Write display settings
-    if (config.showTimedEvents !== undefined) {
-      setShowTimedEvents(config.showTimedEvents)
-    }
-    if (config.matchDescription !== undefined) {
-      setMatchDescription(config.matchDescription)
-    }
-
-    // Update sync settings
-    const settings = getSyncSettings()
-    saveSyncSettings({
-      ...settings,
-      lastSyncedAt: Date.now(),
-    })
-  } catch {
-    // Ignore storage errors
+  // Update display settings in-memory
+  if (v2Config.showTimedEvents !== undefined) {
+    setShowTimedEvents(v2Config.showTimedEvents)
   }
+  if (v2Config.matchDescription !== undefined) {
+    setMatchDescription(v2Config.matchDescription)
+  }
+
+  // Update sync settings
+  const settings = getSyncSettings()
+  saveSyncSettings({
+    ...settings,
+    lastSyncedAt: Date.now(),
+  })
 }
 
 export type SyncResult =
@@ -434,7 +417,7 @@ export type SyncResult =
  * Perform a full sync with Google Drive.
  * - Reads from Drive
  * - Merges with local if both exist
- * - Writes merged result back to both Drive and localStorage
+ * - Writes merged result back to Drive and in-memory state
  *
  * Returns detailed result indicating success, skip reason, or error.
  */
@@ -497,7 +480,7 @@ export async function performSync(): Promise<SyncResult> {
       return { status: 'error', message: lastSyncError }
     }
 
-    // Apply merged config to localStorage
+    // Apply merged config to in-memory state
     applyCloudConfigToLocal(configToWrite)
 
     return { status: 'success' }
@@ -534,7 +517,7 @@ export async function enableSync(): Promise<boolean> {
 /**
  * Disable cloud sync.
  * Sets the "explicitly disabled" flag to opt-out of sync.
- * Keeps local data but stops syncing to Drive.
+ * Keeps in-memory data but stops syncing to Drive.
  */
 export function disableSync(): void {
   try {
@@ -557,12 +540,12 @@ export type DeleteCloudDataResult =
   | { status: 'error'; message: string }
 
 /**
- * Delete all cloud data from Google Drive.
+ * Delete all cloud data from Google Drive and reset in-memory state.
  * This removes the config file from appDataFolder.
- * Local settings are preserved - only cloud copy is deleted.
+ * Resets all settings to defaults.
  * Useful for:
+ * - Starting completely fresh
  * - Users who want to delete their data from Google
- * - Starting fresh if data gets corrupted
  */
 export async function deleteCloudData(): Promise<DeleteCloudDataResult> {
   // Check if we're online before attempting delete
@@ -580,6 +563,9 @@ export async function deleteCloudData(): Promise<DeleteCloudDataResult> {
       return { status: 'error', message }
     }
 
+    // Reset in-memory state to defaults
+    resetInMemoryState()
+
     // Reset sync settings but keep device ID
     const settings = getSyncSettings()
     saveSyncSettings({
@@ -594,6 +580,31 @@ export async function deleteCloudData(): Promise<DeleteCloudDataResult> {
     lastSyncError = message
     return { status: 'error', message }
   }
+}
+
+/**
+ * Reset all in-memory settings to defaults.
+ */
+export function resetInMemoryState(): void {
+  // Clear filters
+  setFilters([])
+
+  // Clear disabled calendars
+  setDisabledCalendars([])
+
+  // Reset categories to defaults (done by importing fresh)
+  const now = Date.now()
+  setCategories(
+    DEFAULT_CATEGORIES.map((cat) => ({
+      ...cat,
+      createdAt: now,
+      updatedAt: now,
+    }))
+  )
+
+  // Reset display settings
+  setShowTimedEvents(false)
+  setMatchDescription(false)
 }
 
 /**

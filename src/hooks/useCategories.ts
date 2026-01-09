@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DEFAULT_CATEGORIES } from '../config/categories'
 import {
   addCategory,
@@ -6,6 +6,7 @@ import {
   removeCategory,
   resetToDefaults,
   restoreDefault,
+  subscribeToCategories,
   UNCATEGORIZED_CATEGORY,
   updateCategory,
 } from '../services/categories'
@@ -33,6 +34,13 @@ interface UseCategoriesResult {
 
 export function useCategories(): UseCategoriesResult {
   const [categories, setCategories] = useState<Category[]>(() => getCategories())
+
+  // Subscribe to external category changes (e.g., from cloud sync)
+  useEffect(() => {
+    return subscribeToCategories((newCategories) => {
+      setCategories(newCategories)
+    })
+  }, [])
 
   const handleAdd = useCallback((input: CategoryInput) => {
     const result = addCategory(input)

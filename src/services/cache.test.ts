@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   clearAllCaches,
   clearCachedEvents,
@@ -9,7 +9,7 @@ import {
 } from './cache'
 import type { YearbirdEvent } from '../types/calendar'
 
-describe('cache service', () => {
+describe('cache service (no-op)', () => {
   const events: YearbirdEvent[] = [
     {
       id: '1',
@@ -25,100 +25,37 @@ describe('cache service', () => {
     },
   ]
 
-  beforeEach(() => {
-    localStorage.clear()
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('returns cached events within ttl', () => {
-    setCachedEvents(2026, events)
-
-    expect(getCachedEvents(2026)).toEqual(events)
-    expect(getCacheTimestamp(2026)).toEqual(new Date('2026-01-01T00:00:00.000Z'))
-  })
-
-  it('expires cached events after ttl', () => {
-    setCachedEvents(2026, events)
-
-    vi.setSystemTime(new Date('2026-01-02T00:00:01.000Z'))
-
+  it('getCachedEvents always returns null (caching disabled)', () => {
     expect(getCachedEvents(2026)).toBeNull()
-    expect(localStorage.getItem('yearbird:events:2026')).toBeNull()
+    expect(getCachedEvents(2025)).toBeNull()
+    expect(getCachedEvents(2026, 'suffix')).toBeNull()
   })
 
-  it('clears only yearbird caches', () => {
-    setCachedEvents(2026, events)
-    localStorage.setItem('other:key', '1')
-
-    clearAllCaches()
-
-    expect(localStorage.getItem('yearbird:events:2026')).toBeNull()
-    expect(localStorage.getItem('other:key')).toBe('1')
-  })
-
-  it('clears only event caches', () => {
-    setCachedEvents(2026, events)
-    localStorage.setItem('yearbird:filters', JSON.stringify(['personal']))
-
-    clearEventCaches()
-
-    expect(localStorage.getItem('yearbird:events:2026')).toBeNull()
-    expect(localStorage.getItem('yearbird:filters')).toBe(JSON.stringify(['personal']))
-  })
-
-  it('drops invalid cached payloads', () => {
-    localStorage.setItem('yearbird:events:2026', '{not-json')
-
-    expect(getCachedEvents(2026)).toBeNull()
-    expect(localStorage.getItem('yearbird:events:2026')).toBeNull()
-    expect(getCacheTimestamp(2026)).toBeNull()
-  })
-
-  it('cleans old caches when storage is full', () => {
-    const originalSetItem = Storage.prototype.setItem
-    const state = { thrown: false }
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key: string, value: string) {
-      if (key === 'yearbird:events:2026' && !state.thrown) {
-        state.thrown = true
-        throw new Error('quota')
-      }
-      return originalSetItem.call(this, key, value)
-    })
-
-    localStorage.setItem(
-      'yearbird:events:2020',
-      JSON.stringify({ events: [], timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 })
-    )
-
-    setCachedEvents(2026, events)
-
-    expect(localStorage.getItem('yearbird:events:2020')).toBeNull()
-    expect(localStorage.getItem('yearbird:events:2026')).not.toBeNull()
-  })
-
-  it('handles missing localStorage gracefully', () => {
-    const original = Object.getOwnPropertyDescriptor(window, 'localStorage')
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      get: () => {
-        throw new Error('blocked')
-      },
-    })
-
-    expect(getCachedEvents(2026)).toBeNull()
-    expect(getCacheTimestamp(2026)).toBeNull()
+  it('setCachedEvents is a no-op (caching disabled)', () => {
+    // Should not throw
     expect(() => setCachedEvents(2026, events)).not.toThrow()
-    expect(() => clearCachedEvents(2026)).not.toThrow()
-    expect(() => clearAllCaches()).not.toThrow()
-    expect(() => clearEventCaches()).not.toThrow()
+    expect(() => setCachedEvents(2026, events, 'suffix')).not.toThrow()
 
-    if (original) {
-      Object.defineProperty(window, 'localStorage', original)
-    }
+    // Still returns null after "setting"
+    expect(getCachedEvents(2026)).toBeNull()
+  })
+
+  it('clearCachedEvents is a no-op (caching disabled)', () => {
+    expect(() => clearCachedEvents(2026)).not.toThrow()
+    expect(() => clearCachedEvents(2026, 'suffix')).not.toThrow()
+  })
+
+  it('clearAllCaches is a no-op (caching disabled)', () => {
+    expect(() => clearAllCaches()).not.toThrow()
+  })
+
+  it('clearEventCaches is a no-op (caching disabled)', () => {
+    expect(() => clearEventCaches()).not.toThrow()
+  })
+
+  it('getCacheTimestamp always returns null (caching disabled)', () => {
+    expect(getCacheTimestamp(2026)).toBeNull()
+    expect(getCacheTimestamp(2025)).toBeNull()
+    expect(getCacheTimestamp(2026, 'suffix')).toBeNull()
   })
 })

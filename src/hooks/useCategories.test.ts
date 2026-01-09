@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCategories } from './useCategories'
 import * as syncManager from '../services/syncManager'
+import { resetToDefaults, setCategories } from '../services/categories'
 
 vi.mock('../services/syncManager', () => ({
   scheduleSyncToCloud: vi.fn(),
@@ -9,7 +10,8 @@ vi.mock('../services/syncManager', () => ({
 
 describe('useCategories', () => {
   beforeEach(() => {
-    localStorage.clear()
+    // Reset in-memory state before each test
+    resetToDefaults()
     vi.clearAllMocks()
   })
 
@@ -160,5 +162,70 @@ describe('useCategories', () => {
     })
 
     expect(syncManager.scheduleSyncToCloud).not.toHaveBeenCalled()
+  })
+
+  it('updates when categories are set externally (e.g., cloud sync)', () => {
+    const { result } = renderHook(() => useCategories())
+
+    expect(result.current.categories).toHaveLength(5)
+
+    // Simulate cloud sync updating categories
+    const now = Date.now()
+    act(() => {
+      setCategories([
+        {
+          id: 'custom-from-cloud',
+          label: 'From Cloud',
+          color: '#AABBCC',
+          keywords: ['cloud'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: false,
+        },
+      ])
+    })
+
+    // Hook should have received the update
+    expect(result.current.categories).toHaveLength(1)
+    expect(result.current.categories[0].label).toBe('From Cloud')
+  })
+
+  it('can edit categories after external update', () => {
+    const { result } = renderHook(() => useCategories())
+
+    // Simulate cloud sync updating categories with a default
+    const now = Date.now()
+    act(() => {
+      setCategories([
+        {
+          id: 'birthdays',
+          label: 'Birthdays',
+          color: '#F59E0B',
+          keywords: ['birthday'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: true,
+        },
+      ])
+    })
+
+    expect(result.current.categories).toHaveLength(1)
+
+    // Now try to edit the category
+    act(() => {
+      result.current.updateCategory('birthdays', {
+        label: 'My Birthdays',
+        color: '#FF0000',
+        keywords: ['bday'],
+        matchMode: 'any',
+      })
+    })
+
+    // Should have updated successfully
+    expect(result.current.categories[0].label).toBe('My Birthdays')
+    expect(result.current.categories[0].color).toBe('#FF0000')
+    expect(syncManager.scheduleSyncToCloud).toHaveBeenCalled()
   })
 })

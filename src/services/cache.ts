@@ -1,158 +1,50 @@
+/**
+ * Cache Service (No-op)
+ *
+ * Previously cached events in localStorage.
+ * Now disabled - events are fetched fresh each session.
+ */
+
 import type { YearbirdEvent } from '../types/calendar'
 
-const CACHE_PREFIX = 'yearbird:events:'
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const CACHE_CLEANUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-
-interface CachedData {
-  events: YearbirdEvent[]
-  timestamp: number
+/**
+ * Get cached events (always returns null - caching disabled).
+ */
+export function getCachedEvents(_year: number, _suffix?: string): YearbirdEvent[] | null {
+  return null
 }
 
-const getStorage = () => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
+/**
+ * Set cached events (no-op - caching disabled).
+ */
+export function setCachedEvents(_year: number, _events: YearbirdEvent[], _suffix?: string): void {
+  // No-op: caching disabled
 }
 
-const parseCachedData = (raw: string): CachedData | null => {
-  try {
-    const parsed = JSON.parse(raw) as CachedData
-    if (!parsed || !Array.isArray(parsed.events) || typeof parsed.timestamp !== 'number') {
-      return null
-    }
-    return parsed
-  } catch {
-    return null
-  }
-}
-const buildCacheKey = (year: number, suffix?: string) =>
-  suffix ? `${CACHE_PREFIX}${year}:${suffix}` : `${CACHE_PREFIX}${year}`
-
-
-export function getCachedEvents(year: number, suffix?: string): YearbirdEvent[] | null {
-  const storage = getStorage()
-  if (!storage) {
-    return null
-  }
-
-  const key = buildCacheKey(year, suffix)
-  const raw = storage.getItem(key)
-  if (!raw) {
-    return null
-  }
-
-  const cached = parseCachedData(raw)
-  if (!cached) {
-    storage.removeItem(key)
-    return null
-  }
-
-  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
-    storage.removeItem(key)
-    return null
-  }
-
-  return cached.events
+/**
+ * Clear cached events for a year (no-op - caching disabled).
+ */
+export function clearCachedEvents(_year: number, _suffix?: string): void {
+  // No-op: caching disabled
 }
 
-export function setCachedEvents(year: number, events: YearbirdEvent[], suffix?: string): void {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  const key = buildCacheKey(year, suffix)
-  const payload: CachedData = {
-    events,
-    timestamp: Date.now(),
-  }
-
-  try {
-    storage.setItem(key, JSON.stringify(payload))
-  } catch {
-    clearOldCaches(storage)
-    try {
-      storage.setItem(key, JSON.stringify(payload))
-    } catch {
-      console.warn('Failed to cache events')
-    }
-  }
-}
-
-export function clearCachedEvents(year: number, suffix?: string): void {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-  storage.removeItem(buildCacheKey(year, suffix))
-}
-
+/**
+ * Clear all caches (no-op - caching disabled).
+ */
 export function clearAllCaches(): void {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  for (const key of Object.keys(storage)) {
-    if (key.startsWith('yearbird:')) {
-      storage.removeItem(key)
-    }
-  }
+  // No-op: caching disabled
 }
 
+/**
+ * Clear all event caches (no-op - caching disabled).
+ */
 export function clearEventCaches(): void {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  for (const key of Object.keys(storage)) {
-    if (key.startsWith(CACHE_PREFIX)) {
-      storage.removeItem(key)
-    }
-  }
+  // No-op: caching disabled
 }
 
-export function getCacheTimestamp(year: number, suffix?: string): Date | null {
-  const storage = getStorage()
-  if (!storage) {
-    return null
-  }
-
-  const key = buildCacheKey(year, suffix)
-  const raw = storage.getItem(key)
-  if (!raw) {
-    return null
-  }
-
-  const cached = parseCachedData(raw)
-  if (!cached) {
-    return null
-  }
-
-  return new Date(cached.timestamp)
-}
-
-function clearOldCaches(storage: Storage): void {
-  for (const key of Object.keys(storage)) {
-    if (!key.startsWith(CACHE_PREFIX)) {
-      continue
-    }
-
-    const raw = storage.getItem(key)
-    if (!raw) {
-      continue
-    }
-
-    const cached = parseCachedData(raw)
-    if (!cached || Date.now() - cached.timestamp > CACHE_CLEANUP_MAX_AGE_MS) {
-      storage.removeItem(key)
-    }
-  }
+/**
+ * Get cache timestamp (always returns null - caching disabled).
+ */
+export function getCacheTimestamp(_year: number, _suffix?: string): Date | null {
+  return null
 }

@@ -1,44 +1,18 @@
+/**
+ * Event Filters Service (In-Memory)
+ *
+ * Stores hidden event patterns in memory only.
+ * Populated from cloud sync if enabled, otherwise starts empty.
+ */
+
 export interface EventFilter {
   id: string
   pattern: string
   createdAt: number
 }
 
-const FILTERS_KEY = 'yearbird:filters'
-
-const getStorage = (): Storage | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
-
-const parseFilters = (raw: string): EventFilter[] | null => {
-  try {
-    const parsed = JSON.parse(raw) as EventFilter[]
-    if (!Array.isArray(parsed)) {
-      return null
-    }
-    if (
-      parsed.some(
-        (filter) =>
-          !filter ||
-          typeof filter.id !== 'string' ||
-          typeof filter.pattern !== 'string' ||
-          typeof filter.createdAt !== 'number'
-      )
-    ) {
-      return null
-    }
-    return parsed
-  } catch {
-    return null
-  }
-}
+// In-memory storage
+let filters: EventFilter[] = []
 
 const createFilterId = (): string => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -47,46 +21,38 @@ const createFilterId = (): string => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+/**
+ * Get all event filters.
+ */
 export function getFilters(): EventFilter[] {
-  const storage = getStorage()
-  if (!storage) {
-    return []
-  }
-
-  const raw = storage.getItem(FILTERS_KEY)
-  if (!raw) {
-    return []
-  }
-
-  const parsed = parseFilters(raw)
-  if (!parsed) {
-    storage.removeItem(FILTERS_KEY)
-    return []
-  }
-
-  const cleaned = parsed
-    .map((filter) => ({ ...filter, pattern: filter.pattern.trim() }))
-    .filter((filter) => filter.pattern.length > 0)
-
-  if (cleaned.length !== parsed.length) {
-    try {
-      storage.setItem(FILTERS_KEY, JSON.stringify(cleaned))
-    } catch {
-      // Best effort cleanup; ignore storage failures.
-    }
-  }
-
-  return cleaned
+  return [...filters]
 }
 
+/**
+ * Set all filters (used by cloud sync to populate state).
+ */
+export function setFilters(newFilters: EventFilter[]): void {
+  filters = newFilters
+    .filter(
+      (f) =>
+        f &&
+        typeof f.id === 'string' &&
+        typeof f.pattern === 'string' &&
+        typeof f.createdAt === 'number'
+    )
+    .map((f) => ({ ...f, pattern: f.pattern.trim() }))
+    .filter((f) => f.pattern.length > 0)
+}
+
+/**
+ * Add a new filter pattern.
+ */
 export function addFilter(pattern: string): EventFilter | null {
   const trimmed = pattern.trim()
   if (!trimmed) {
     return null
   }
 
-  const storage = getStorage()
-  const filters = storage ? getFilters() : []
   const normalized = trimmed.toLowerCase()
   const existing = filters.find(
     (filter) => filter.pattern.trim().toLowerCase() === normalized
@@ -94,51 +60,37 @@ export function addFilter(pattern: string): EventFilter | null {
   if (existing) {
     return existing
   }
+
   const newFilter: EventFilter = {
     id: createFilterId(),
     pattern: trimmed,
     createdAt: Date.now(),
   }
 
-  filters.push(newFilter)
-
-  if (storage) {
-    try {
-      storage.setItem(FILTERS_KEY, JSON.stringify(filters))
-    } catch {
-      // Swallow storage errors (quota, disabled storage) and keep in-memory state.
-    }
-  }
-
+  filters = [...filters, newFilter]
   return newFilter
 }
 
+/**
+ * Remove a filter by ID.
+ */
 export function removeFilter(id: string): void {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  const filters = getFilters().filter((filter) => filter.id !== id)
-  try {
-    storage.setItem(FILTERS_KEY, JSON.stringify(filters))
-  } catch {
-    // Ignore storage failures to avoid breaking UI state.
-  }
+  filters = filters.filter((filter) => filter.id !== id)
 }
 
+/**
+ * Clear all filters.
+ */
 export function clearFilters(): void {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  storage.removeItem(FILTERS_KEY)
+  filters = []
 }
 
-export function isEventFiltered(eventTitle: string, filters: EventFilter[]): boolean {
+/**
+ * Check if an event title matches any filter.
+ */
+export function isEventFiltered(eventTitle: string, filterList: EventFilter[]): boolean {
   const lowerTitle = eventTitle.toLowerCase()
-  return filters.some((filter) => {
+  return filterList.some((filter) => {
     const pattern = filter.pattern.trim()
     if (!pattern) {
       return false

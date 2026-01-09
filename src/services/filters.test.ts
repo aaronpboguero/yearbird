@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { addFilter, clearFilters, getFilters, isEventFiltered, removeFilter } from './filters'
+import type { EventFilter } from '../types/calendar'
+import {
+  addFilter,
+  clearFilters,
+  getFilters,
+  isEventFiltered,
+  removeFilter,
+  setFilters,
+} from './filters'
 
 const createCryptoStub = () => {
   let counter = 0
@@ -11,9 +19,9 @@ const createCryptoStub = () => {
   }
 }
 
-describe('filters service', () => {
+describe('filters service (in-memory)', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearFilters()
     vi.stubGlobal('crypto', createCryptoStub())
   })
 
@@ -21,7 +29,7 @@ describe('filters service', () => {
     vi.unstubAllGlobals()
   })
 
-  it('returns empty list when nothing stored', () => {
+  it('returns empty list by default', () => {
     expect(getFilters()).toEqual([])
   })
 
@@ -90,81 +98,54 @@ describe('filters service', () => {
     expect(getFilters()).toHaveLength(1)
   })
 
-  it('drops empty patterns from stored data', () => {
-    localStorage.setItem(
-      'yearbird:filters',
-      JSON.stringify([
-        { id: '1', pattern: '  ', createdAt: Date.now() },
-        { id: '2', pattern: 'rent', createdAt: Date.now() },
-      ])
-    )
-
-    const filters = getFilters()
-    expect(filters).toHaveLength(1)
-    expect(filters[0]?.pattern).toBe('rent')
-  })
-
   it('ignores empty patterns during matching', () => {
     const filters = [{ id: '1', pattern: '   ', createdAt: Date.now() }]
 
     expect(isEventFiltered('Rent Payment', filters)).toBe(false)
   })
 
-  it('drops invalid stored data', () => {
-    localStorage.setItem('yearbird:filters', '{not-json')
-
-    expect(getFilters()).toEqual([])
-    expect(localStorage.getItem('yearbird:filters')).toBeNull()
-  })
-
-  it('returns empty when storage is unavailable', () => {
-    // Simulate storage being unavailable
-    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
-      throw new Error('Storage unavailable')
-    })
-
-    expect(getFilters()).toEqual([])
-
-    vi.restoreAllMocks()
-  })
-
-  it('handles removeFilter when storage is unavailable', () => {
-    // Simulate storage being unavailable
-    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
-      throw new Error('Storage unavailable')
-    })
-
-    // Should not throw
-    removeFilter('some-id')
-
-    vi.restoreAllMocks()
-  })
-
-  it('handles clearFilters when storage is unavailable', () => {
-    // Simulate storage being unavailable
-    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
-      throw new Error('Storage unavailable')
-    })
-
-    // Should not throw
-    clearFilters()
-
-    vi.restoreAllMocks()
-  })
-
-  it('drops invalid filter objects from stored data', () => {
-    localStorage.setItem(
-      'yearbird:filters',
-      JSON.stringify([
-        { id: '1', pattern: 'rent', createdAt: Date.now() },
-        { id: '2', pattern: 'invalid' }, // Missing createdAt
-        { id: '3', createdAt: Date.now() }, // Missing pattern
-        null, // Invalid entry
+  describe('setFilters', () => {
+    it('sets filters from array', () => {
+      const now = Date.now()
+      setFilters([
+        { id: '1', pattern: 'rent', createdAt: now },
+        { id: '2', pattern: 'sync', createdAt: now },
       ])
-    )
 
-    // Should return empty and clean up invalid data
-    expect(getFilters()).toEqual([])
-    expect(localStorage.getItem('yearbird:filters')).toBeNull()
+      const filters = getFilters()
+      expect(filters).toHaveLength(2)
+      expect(filters[0]?.pattern).toBe('rent')
+      expect(filters[1]?.pattern).toBe('sync')
+    })
+
+    it('trims patterns', () => {
+      setFilters([{ id: '1', pattern: '  rent  ', createdAt: Date.now() }])
+
+      expect(getFilters()[0]?.pattern).toBe('rent')
+    })
+
+    it('drops empty patterns', () => {
+      setFilters([
+        { id: '1', pattern: '  ', createdAt: Date.now() },
+        { id: '2', pattern: 'rent', createdAt: Date.now() },
+      ])
+
+      const filters = getFilters()
+      expect(filters).toHaveLength(1)
+      expect(filters[0]?.pattern).toBe('rent')
+    })
+
+    it('drops invalid filter objects', () => {
+      setFilters([
+        { id: '1', pattern: 'rent', createdAt: Date.now() },
+        { id: '2', pattern: 'invalid' } as unknown as EventFilter, // Missing createdAt
+        { id: '3', createdAt: Date.now() } as unknown as EventFilter, // Missing pattern
+        null as unknown as EventFilter, // Invalid entry
+      ])
+
+      const filters = getFilters()
+      expect(filters).toHaveLength(1)
+      expect(filters[0]?.pattern).toBe('rent')
+    })
   })
 })

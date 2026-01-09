@@ -1,15 +1,12 @@
-const DISABLED_CALENDARS_KEY = 'yearbird:disabled-calendars'
+/**
+ * Calendar Visibility Service (In-Memory)
+ *
+ * Stores disabled calendar IDs in memory only.
+ * Populated from cloud sync if enabled, otherwise starts empty.
+ */
 
-const getStorage = (): Storage | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
+// In-memory storage
+let disabledCalendars: string[] = []
 
 const normalizeDisabled = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
@@ -20,69 +17,39 @@ const normalizeDisabled = (value: unknown): string[] => {
   return [...new Set(entries.map((entry) => entry.trim()).filter(Boolean))]
 }
 
-const writeDisabledCalendars = (disabled: string[]) => {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  try {
-    if (disabled.length === 0) {
-      storage.removeItem(DISABLED_CALENDARS_KEY)
-      return
-    }
-    storage.setItem(DISABLED_CALENDARS_KEY, JSON.stringify(disabled))
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
+/**
+ * Get all disabled calendar IDs.
+ */
 export function getDisabledCalendars(): string[] {
-  const storage = getStorage()
-  if (!storage) {
-    return []
-  }
-
-  const raw = storage.getItem(DISABLED_CALENDARS_KEY)
-  if (!raw) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(raw)
-    const cleaned = normalizeDisabled(parsed)
-    if (cleaned.length !== parsed.length) {
-      writeDisabledCalendars(cleaned)
-    }
-    return cleaned
-  } catch {
-    storage.removeItem(DISABLED_CALENDARS_KEY)
-    return []
-  }
+  return [...disabledCalendars]
 }
 
+/**
+ * Set all disabled calendars (used by cloud sync to populate state).
+ */
 export function setDisabledCalendars(disabled: string[]): string[] {
-  const cleaned = normalizeDisabled(disabled)
-  writeDisabledCalendars(cleaned)
-  return cleaned
+  disabledCalendars = normalizeDisabled(disabled)
+  return [...disabledCalendars]
 }
 
+/**
+ * Disable a calendar by ID.
+ */
 export function disableCalendar(id: string): string[] {
-  const existing = getDisabledCalendars()
-  if (existing.includes(id)) {
-    return existing
+  if (disabledCalendars.includes(id)) {
+    return [...disabledCalendars]
   }
-  const next = [...existing, id]
-  writeDisabledCalendars(next)
-  return next
+  disabledCalendars = [...disabledCalendars, id]
+  return [...disabledCalendars]
 }
 
+/**
+ * Enable a calendar by ID.
+ */
 export function enableCalendar(id: string): string[] {
-  const existing = getDisabledCalendars()
-  if (!existing.includes(id)) {
-    return existing
+  if (!disabledCalendars.includes(id)) {
+    return [...disabledCalendars]
   }
-  const next = existing.filter((entry) => entry !== id)
-  writeDisabledCalendars(next)
-  return next
+  disabledCalendars = disabledCalendars.filter((entry) => entry !== id)
+  return [...disabledCalendars]
 }

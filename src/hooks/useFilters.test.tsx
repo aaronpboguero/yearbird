@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { YearbirdEvent } from '../types/calendar'
 import { useFilters } from './useFilters'
+import { clearFilters, setFilters } from '../services/filters'
 
 const createCryptoStub = () => {
   let counter = 0
@@ -42,7 +43,8 @@ const sampleEvents: YearbirdEvent[] = [
 
 describe('useFilters', () => {
   beforeEach(() => {
-    localStorage.clear()
+    // Reset in-memory state before each test
+    clearFilters()
     vi.stubGlobal('crypto', createCryptoStub())
   })
 
@@ -50,17 +52,15 @@ describe('useFilters', () => {
     vi.unstubAllGlobals()
   })
 
-  it('loads filters from storage on mount', async () => {
-    localStorage.setItem(
-      'yearbird:filters',
-      JSON.stringify([
-        {
-          id: 'stored-1',
-          pattern: 'rent',
-          createdAt: Date.now(),
-        },
-      ])
-    )
+  it('loads filters from in-memory state on mount', async () => {
+    // Set up in-memory state
+    setFilters([
+      {
+        id: 'stored-1',
+        pattern: 'rent',
+        createdAt: Date.now(),
+      },
+    ])
 
     const { result } = renderHook(() => useFilters())
 

@@ -1,36 +1,40 @@
 /**
- * Unified Categories Service
+ * Unified Categories Service (In-Memory)
  *
- * Manages all categories (both default and user-created) in a single storage.
- * Handles migration from the old split format (disabled-built-in + custom-categories).
+ * Manages all categories (both default and user-created) in memory.
+ * Populated from cloud sync if enabled, otherwise starts with defaults.
  */
 
 import { DEFAULT_CATEGORIES, UNCATEGORIZED_CATEGORY } from '../config/categories'
 import type { Category, CategoryInput, CategoryMatchMode, CategoryResult } from '../types/categories'
 
-const CATEGORIES_KEY = 'yearbird:categories'
-const CATEGORIES_VERSION = 1
 const CUSTOM_CATEGORY_PREFIX = 'custom-'
 const DEFAULT_MATCH_MODE: CategoryMatchMode = 'any'
 const MAX_LABEL_LENGTH = 32
 
-// Legacy keys for migration
-const LEGACY_DISABLED_BUILT_IN_KEY = 'yearbird:disabled-built-in-categories'
-const LEGACY_CUSTOM_CATEGORIES_KEY = 'yearbird:custom-categories'
+// In-memory storage - initialized with defaults
+let categories: Category[] = initializeDefaults()
 
-interface StoredCategories {
-  version: number
-  categories: Category[]
+// Subscription mechanism for external state changes (e.g., cloud sync)
+type CategoriesListener = (categories: Category[]) => void
+const listeners = new Set<CategoriesListener>()
+
+/**
+ * Subscribe to category changes from external sources (e.g., cloud sync).
+ * Returns an unsubscribe function.
+ */
+export function subscribeToCategories(listener: CategoriesListener): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
-const getStorage = (): Storage | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  try {
-    return window.localStorage
-  } catch {
-    return null
+/**
+ * Notify all listeners of category changes.
+ */
+function notifyListeners(): void {
+  const currentCategories = [...categories]
+  for (const listener of listeners) {
+    listener(currentCategories)
   }
 }
 
@@ -71,10 +75,10 @@ const isValidColor = (color: string): boolean => /^#[0-9a-fA-F]{6}$/.test(color)
 /**
  * Sanitize and validate a list of categories.
  */
-const sanitizeCategories = (categories: Category[]): Category[] => {
+const sanitizeCategories = (cats: Category[]): Category[] => {
   const deduped = new Map<string, Category>()
 
-  for (const entry of categories) {
+  for (const entry of cats) {
     if (!entry || typeof entry !== 'object') {
       continue
     }
@@ -88,7 +92,6 @@ const sanitizeCategories = (categories: Category[]): Category[] => {
       continue
     }
 
-    // Allow categories with no keywords (for default categories that might be edited)
     const matchMode = normalizeMatchMode(entry.matchMode)
     const createdAt = Number.isFinite(entry.createdAt) ? entry.createdAt : Date.now()
     const updatedAt = Number.isFinite(entry.updatedAt) ? entry.updatedAt : createdAt
@@ -116,203 +119,30 @@ const sanitizeCategories = (categories: Category[]): Category[] => {
 }
 
 /**
- * Write categories to storage.
+ * Initialize with default categories.
  */
-const writeCategories = (categories: Category[]): void => {
-  const storage = getStorage()
-  if (!storage) {
-    return
-  }
-
-  try {
-    const payload: StoredCategories = {
-      version: CATEGORIES_VERSION,
-      categories,
-    }
-    storage.setItem(CATEGORIES_KEY, JSON.stringify(payload))
-  } catch {
-    // Ignore storage failures
-  }
-}
-
-/**
- * Read legacy disabled built-in categories.
- */
-const readLegacyDisabledBuiltIns = (): string[] => {
-  const storage = getStorage()
-  if (!storage) {
-    return []
-  }
-
-  try {
-    const raw = storage.getItem(LEGACY_DISABLED_BUILT_IN_KEY)
-    if (!raw) {
-      return []
-    }
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-    return parsed.filter((item) => typeof item === 'string')
-  } catch {
-    return []
-  }
-}
-
-/**
- * Read legacy custom categories.
- */
-const readLegacyCustomCategories = (): Category[] => {
-  const storage = getStorage()
-  if (!storage) {
-    return []
-  }
-
-  try {
-    const raw = storage.getItem(LEGACY_CUSTOM_CATEGORIES_KEY)
-    if (!raw) {
-      return []
-    }
-    const parsed = JSON.parse(raw)
-    const categories = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed?.categories)
-        ? parsed.categories
-        : null
-    if (!categories) {
-      return []
-    }
-    return categories
-      .filter((cat: unknown) => cat && typeof cat === 'object')
-      .map((cat: Record<string, unknown>) => ({
-        id: String(cat.id || ''),
-        label: String(cat.label || ''),
-        color: String(cat.color || ''),
-        keywords: Array.isArray(cat.keywords) ? cat.keywords.map(String) : [],
-        matchMode: normalizeMatchMode(cat.matchMode as CategoryMatchMode | null),
-        createdAt: Number(cat.createdAt) || Date.now(),
-        updatedAt: Number(cat.updatedAt) || Date.now(),
-        isDefault: false,
-      }))
-  } catch {
-    return []
-  }
-}
-
-/**
- * Migrate from legacy format to unified format.
- */
-const migrateFromLegacy = (): Category[] => {
-  const storage = getStorage()
+function initializeDefaults(): Category[] {
   const now = Date.now()
-
-  // Read legacy data
-  const disabledBuiltIns = new Set(readLegacyDisabledBuiltIns())
-  const legacyCustom = readLegacyCustomCategories()
-
-  // Build unified list: defaults (minus disabled) + custom
-  const categories: Category[] = []
-
-  for (const defaultCat of DEFAULT_CATEGORIES) {
-    if (!disabledBuiltIns.has(defaultCat.id)) {
-      categories.push({
-        ...defaultCat,
-        createdAt: now,
-        updatedAt: now,
-      })
-    }
-  }
-
-  // Add custom categories
-  for (const custom of legacyCustom) {
-    if (custom.id && custom.label && custom.color) {
-      categories.push({
-        ...custom,
-        isDefault: false,
-      })
-    }
-  }
-
-  // Sanitize and write
-  const sanitized = sanitizeCategories(categories)
-  writeCategories(sanitized)
-
-  // Clean up legacy keys
-  if (storage) {
-    try {
-      storage.removeItem(LEGACY_DISABLED_BUILT_IN_KEY)
-      storage.removeItem(LEGACY_CUSTOM_CATEGORIES_KEY)
-    } catch {
-      // Ignore
-    }
-  }
-
-  return sanitized
-}
-
-/**
- * Initialize with default categories (fresh install).
- */
-const initializeDefaults = (): Category[] => {
-  const now = Date.now()
-  const categories: Category[] = DEFAULT_CATEGORIES.map((cat) => ({
+  return DEFAULT_CATEGORIES.map((cat) => ({
     ...cat,
     createdAt: now,
     updatedAt: now,
   }))
-  writeCategories(categories)
-  return categories
 }
 
 /**
  * Get all user categories (excludes uncategorized).
  */
 export function getCategories(): Category[] {
-  const storage = getStorage()
-  if (!storage) {
-    // Return defaults for SSR
-    const now = Date.now()
-    return DEFAULT_CATEGORIES.map((cat) => ({
-      ...cat,
-      createdAt: now,
-      updatedAt: now,
-    }))
-  }
+  return [...categories]
+}
 
-  // Check if we have new format
-  const raw = storage.getItem(CATEGORIES_KEY)
-
-  if (!raw) {
-    // Check for legacy data to migrate
-    const hasLegacyDisabled = storage.getItem(LEGACY_DISABLED_BUILT_IN_KEY)
-    const hasLegacyCustom = storage.getItem(LEGACY_CUSTOM_CATEGORIES_KEY)
-
-    if (hasLegacyDisabled || hasLegacyCustom) {
-      return migrateFromLegacy()
-    }
-
-    // Fresh install - initialize with defaults
-    return initializeDefaults()
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as StoredCategories
-    if (!parsed || !Array.isArray(parsed.categories)) {
-      throw new Error('Invalid categories format')
-    }
-
-    const sanitized = sanitizeCategories(parsed.categories)
-
-    // Re-write if sanitization changed anything
-    if (sanitized.length !== parsed.categories.length) {
-      writeCategories(sanitized)
-    }
-
-    return sanitized
-  } catch {
-    storage.removeItem(CATEGORIES_KEY)
-    return initializeDefaults()
-  }
+/**
+ * Set all categories (used by cloud sync to populate state).
+ */
+export function setCategories(newCategories: Category[]): void {
+  categories = sanitizeCategories(newCategories)
+  notifyListeners()
 }
 
 /**
@@ -341,7 +171,6 @@ const buildCategory = (
   }
 
   // Check for duplicate labels (excluding current category if editing)
-  // Note: existing entries should already be sanitized/trimmed via getCategories()
   const normalizedLabel = label.toLowerCase()
   const duplicate = existing.find(
     (entry) => entry.id !== id && entry.label.toLowerCase() === normalizedLabel
@@ -377,13 +206,12 @@ const buildCategory = (
  * Add a new category.
  */
 export function addCategory(input: CategoryInput): CategoryResult {
-  const existing = getCategories()
-  const result = buildCategory(input, existing)
+  const result = buildCategory(input, categories)
   if (!result.category) {
     return result
   }
 
-  writeCategories([...existing, result.category])
+  categories = [...categories, result.category]
   return result
 }
 
@@ -391,19 +219,17 @@ export function addCategory(input: CategoryInput): CategoryResult {
  * Update an existing category.
  */
 export function updateCategory(id: string, input: CategoryInput): CategoryResult {
-  const existing = getCategories()
-  const current = existing.find((entry) => entry.id === id)
+  const current = categories.find((entry) => entry.id === id)
   if (!current) {
     return { category: null, error: 'Category not found.' }
   }
 
-  const result = buildCategory(input, existing, id)
+  const result = buildCategory(input, categories, id)
   if (!result.category) {
     return result
   }
 
-  const updated = existing.map((entry) => (entry.id === id ? result.category! : entry))
-  writeCategories(updated)
+  categories = categories.map((entry) => (entry.id === id ? result.category! : entry))
   return result
 }
 
@@ -411,23 +237,15 @@ export function updateCategory(id: string, input: CategoryInput): CategoryResult
  * Remove a category by ID.
  */
 export function removeCategory(id: string): void {
-  const existing = getCategories()
-  const updated = existing.filter((entry) => entry.id !== id)
-  writeCategories(updated)
+  categories = categories.filter((entry) => entry.id !== id)
 }
 
 /**
  * Reset all categories to defaults.
  */
 export function resetToDefaults(): Category[] {
-  const now = Date.now()
-  const categories: Category[] = DEFAULT_CATEGORIES.map((cat) => ({
-    ...cat,
-    createdAt: now,
-    updatedAt: now,
-  }))
-  writeCategories(categories)
-  return categories
+  categories = initializeDefaults()
+  return [...categories]
 }
 
 /**
@@ -439,16 +257,14 @@ export function restoreDefault(id: string): CategoryResult {
     return { category: null, error: 'Not a default category.' }
   }
 
-  const existing = getCategories()
-
   // Check if already exists
-  if (existing.some((cat) => cat.id === id)) {
+  if (categories.some((cat) => cat.id === id)) {
     return { category: null, error: 'Category already exists.' }
   }
 
   // Check for label collision
   const normalizedLabel = defaultCat.label.toLowerCase()
-  if (existing.some((cat) => cat.label.toLowerCase() === normalizedLabel)) {
+  if (categories.some((cat) => cat.label.toLowerCase() === normalizedLabel)) {
     return { category: null, error: 'A category with this name already exists.' }
   }
 
@@ -459,7 +275,7 @@ export function restoreDefault(id: string): CategoryResult {
     updatedAt: now,
   }
 
-  writeCategories([...existing, category])
+  categories = [...categories, category]
   return { category, error: null }
 }
 
@@ -467,8 +283,7 @@ export function restoreDefault(id: string): CategoryResult {
  * Get list of default categories that have been removed.
  */
 export function getRemovedDefaults(): Category[] {
-  const existing = getCategories()
-  const existingIds = new Set(existing.map((cat) => cat.id))
+  const existingIds = new Set(categories.map((cat) => cat.id))
   const now = Date.now()
 
   return DEFAULT_CATEGORIES.filter((cat) => !existingIds.has(cat.id)).map((cat) => ({

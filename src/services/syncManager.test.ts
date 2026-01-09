@@ -38,18 +38,27 @@ vi.mock('./driveSync', () => ({
 // Mock data service modules
 vi.mock('./filters', () => ({
   getFilters: vi.fn(() => []),
+  setFilters: vi.fn(),
 }))
 
 vi.mock('./calendarVisibility', () => ({
   getDisabledCalendars: vi.fn(() => []),
+  setDisabledCalendars: vi.fn(),
 }))
 
 // Mock unified categories service
 vi.mock('./categories', () => ({
   getCategories: vi.fn(() => []),
+  setCategories: vi.fn(),
 }))
 
-// Note: displaySettings is NOT mocked - we test with real localStorage integration
+// Mock display settings service
+vi.mock('./displaySettings', () => ({
+  getShowTimedEvents: vi.fn(() => false),
+  setShowTimedEvents: vi.fn(),
+  getMatchDescription: vi.fn(() => false),
+  setMatchDescription: vi.fn(),
+}))
 
 describe('syncManager', () => {
   beforeEach(() => {
@@ -278,7 +287,11 @@ describe('syncManager', () => {
   })
 
   describe('applyCloudConfigToLocal', () => {
-    it('writes config data to respective localStorage keys', () => {
+    it('calls setters with config data', async () => {
+      const { setFilters } = await import('./filters')
+      const { setDisabledCalendars } = await import('./calendarVisibility')
+      const { setCategories } = await import('./categories')
+
       const config: CloudConfigV2 = {
         version: 2,
         updatedAt: Date.now(),
@@ -301,28 +314,16 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      const filters = JSON.parse(localStorage.getItem('yearbird:filters') || '[]')
-      expect(filters).toEqual(config.filters)
-
-      const disabledCalendars = JSON.parse(localStorage.getItem('yearbird:disabled-calendars') || '[]')
-      expect(disabledCalendars).toEqual(config.disabledCalendars)
-
-      // Should write unified categories in wrapped format
-      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
-      expect(stored.version).toBe(1)
-      expect(stored.categories).toEqual(config.categories)
-
-      // Legacy keys should be removed
-      expect(localStorage.getItem('yearbird:disabled-built-in-categories')).toBeNull()
-      expect(localStorage.getItem('yearbird:custom-categories')).toBeNull()
+      expect(setFilters).toHaveBeenCalledWith(config.filters)
+      expect(setDisabledCalendars).toHaveBeenCalledWith(config.disabledCalendars)
+      expect(setCategories).toHaveBeenCalled()
     })
 
-    it('removes localStorage keys when arrays are empty', () => {
-      // First set some data
-      localStorage.setItem('yearbird:filters', JSON.stringify([{ id: '1', pattern: 'test', createdAt: 1000 }]))
-      localStorage.setItem('yearbird:disabled-calendars', JSON.stringify(['cal-1']))
+    it('calls setters with empty arrays', async () => {
+      const { setFilters } = await import('./filters')
+      const { setDisabledCalendars } = await import('./calendarVisibility')
+      const { setCategories } = await import('./categories')
 
-      // Apply empty config
       const config: CloudConfigV2 = {
         version: 2,
         updatedAt: Date.now(),
@@ -334,11 +335,14 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      expect(localStorage.getItem('yearbird:filters')).toBeNull()
-      expect(localStorage.getItem('yearbird:disabled-calendars')).toBeNull()
+      expect(setFilters).toHaveBeenCalledWith([])
+      expect(setDisabledCalendars).toHaveBeenCalledWith([])
+      expect(setCategories).toHaveBeenCalled()
     })
 
-    it('applies showTimedEvents to localStorage', () => {
+    it('applies showTimedEvents via setter', async () => {
+      const { setShowTimedEvents } = await import('./displaySettings')
+
       const config: CloudConfig = {
         version: 1,
         updatedAt: Date.now(),
@@ -352,10 +356,12 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      expect(localStorage.getItem('yearbird:show-timed-events')).toBe('true')
+      expect(setShowTimedEvents).toHaveBeenCalledWith(true)
     })
 
-    it('applies matchDescription to localStorage', () => {
+    it('applies matchDescription via setter', async () => {
+      const { setMatchDescription } = await import('./displaySettings')
+
       const config: CloudConfig = {
         version: 1,
         updatedAt: Date.now(),
@@ -369,13 +375,14 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      expect(localStorage.getItem('yearbird:match-description')).toBe('true')
+      expect(setMatchDescription).toHaveBeenCalledWith(true)
     })
 
-    it('does not set display settings when undefined in config', () => {
-      // Pre-set values
-      localStorage.setItem('yearbird:show-timed-events', 'true')
-      localStorage.setItem('yearbird:match-description', 'true')
+    it('does not call display settings setters when undefined in config', async () => {
+      const { setShowTimedEvents, setMatchDescription } = await import('./displaySettings')
+
+      vi.mocked(setShowTimedEvents).mockClear()
+      vi.mocked(setMatchDescription).mockClear()
 
       const config: CloudConfig = {
         version: 1,
@@ -390,14 +397,12 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      // Original values should remain unchanged
-      expect(localStorage.getItem('yearbird:show-timed-events')).toBe('true')
-      expect(localStorage.getItem('yearbird:match-description')).toBe('true')
+      expect(setShowTimedEvents).not.toHaveBeenCalled()
+      expect(setMatchDescription).not.toHaveBeenCalled()
     })
 
-    it('removes display settings keys when set to false', () => {
-      localStorage.setItem('yearbird:show-timed-events', 'true')
-      localStorage.setItem('yearbird:match-description', 'true')
+    it('applies false values via setters', async () => {
+      const { setShowTimedEvents, setMatchDescription } = await import('./displaySettings')
 
       const config: CloudConfig = {
         version: 1,
@@ -413,8 +418,8 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      expect(localStorage.getItem('yearbird:show-timed-events')).toBeNull()
-      expect(localStorage.getItem('yearbird:match-description')).toBeNull()
+      expect(setShowTimedEvents).toHaveBeenCalledWith(false)
+      expect(setMatchDescription).toHaveBeenCalledWith(false)
     })
   })
 
@@ -487,10 +492,10 @@ describe('syncManager', () => {
       expect(config.categories[0].id).toBe('work')
     })
 
-    it('includes display settings in built config', () => {
-      // Set display settings via localStorage (what the actual implementation reads)
-      localStorage.setItem('yearbird:show-timed-events', 'true')
-      localStorage.setItem('yearbird:match-description', 'true')
+    it('includes display settings in built config', async () => {
+      const { getShowTimedEvents, getMatchDescription } = await import('./displaySettings')
+      vi.mocked(getShowTimedEvents).mockReturnValue(true)
+      vi.mocked(getMatchDescription).mockReturnValue(true)
 
       saveSyncSettings({
         enabled: true,
@@ -504,8 +509,11 @@ describe('syncManager', () => {
       expect(config.matchDescription).toBe(true)
     })
 
-    it('includes false display settings values', () => {
-      // localStorage clear means values are false by default
+    it('includes false display settings values', async () => {
+      const { getShowTimedEvents, getMatchDescription } = await import('./displaySettings')
+      vi.mocked(getShowTimedEvents).mockReturnValue(false)
+      vi.mocked(getMatchDescription).mockReturnValue(false)
+
       saveSyncSettings({
         enabled: true,
         lastSyncedAt: null,
@@ -944,7 +952,9 @@ describe('syncManager', () => {
   })
 
   describe('applyCloudConfigToLocal with categories', () => {
-    it('writes categories to localStorage', () => {
+    it('calls setCategories with categories', async () => {
+      const { setCategories } = await import('./categories')
+
       const config: CloudConfigV2 = {
         version: 2,
         updatedAt: Date.now(),
@@ -966,15 +976,15 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      // Categories are stored in wrapped format: { version: 1, categories: [...] }
-      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
-      expect(stored.version).toBe(1)
-      expect(stored.categories).toHaveLength(1)
-      expect(stored.categories[0].label).toBe('Test Category')
+      expect(setCategories).toHaveBeenCalled()
+      // Verify categories were passed (with isDefault added)
+      const calledWith = vi.mocked(setCategories).mock.calls[0][0]
+      expect(calledWith).toHaveLength(1)
+      expect(calledWith[0].label).toBe('Test Category')
     })
 
-    it('handles empty categories array', () => {
-      localStorage.setItem('yearbird:categories', JSON.stringify({ version: 1, categories: [{ id: 'old' }] }))
+    it('handles empty categories array', async () => {
+      const { setCategories } = await import('./categories')
 
       const config: CloudConfigV2 = {
         version: 2,
@@ -987,13 +997,12 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      // Even empty categories should write wrapped format with empty array
-      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
-      expect(stored.version).toBe(1)
-      expect(stored.categories).toEqual([])
+      expect(setCategories).toHaveBeenCalled()
     })
 
-    it('migrates v1 to v2 when applying', () => {
+    it('migrates v1 to v2 when applying', async () => {
+      const { setCategories } = await import('./categories')
+
       const configV1: CloudConfigV1 = {
         version: 1,
         updatedAt: Date.now(),
@@ -1016,15 +1025,14 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(configV1)
 
-      // Should write unified categories (defaults minus disabled + custom) in wrapped format
-      const raw = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
-      expect(raw.version).toBe(1)
-      const stored = raw.categories || []
-      expect(stored.find((c: { id: string }) => c.id === 'custom-1')).toBeDefined()
+      expect(setCategories).toHaveBeenCalled()
+      // Categories should include custom + defaults minus disabled
+      const calledWith = vi.mocked(setCategories).mock.calls[0][0]
+      expect(calledWith.find((c: { id: string }) => c.id === 'custom-1')).toBeDefined()
       // Work was disabled, so it shouldn't be in categories
-      expect(stored.find((c: { id: string }) => c.id === 'work')).toBeUndefined()
+      expect(calledWith.find((c: { id: string }) => c.id === 'work')).toBeUndefined()
       // Other defaults should be present
-      expect(stored.find((c: { id: string }) => c.id === 'birthdays')).toBeDefined()
+      expect(calledWith.find((c: { id: string }) => c.id === 'birthdays')).toBeDefined()
     })
   })
 

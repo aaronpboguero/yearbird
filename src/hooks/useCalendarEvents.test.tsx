@@ -1,8 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { setCachedEvents } from '../services/cache'
 import { fetchEventsForYear } from '../services/calendar'
-import type { YearbirdEvent } from '../types/calendar'
 import { useCalendarEvents } from './useCalendarEvents'
 
 vi.mock('../services/calendar', () => ({
@@ -12,23 +10,8 @@ vi.mock('../services/calendar', () => ({
 const fetchEventsForYearMock = vi.mocked(fetchEventsForYear)
 const CALENDAR_IDS = ['primary']
 
-const cachedEvent: YearbirdEvent = {
-  id: 'primary:1',
-  title: 'Trip',
-  startDate: '2026-01-01',
-  endDate: '2026-01-03',
-  isAllDay: true,
-  isMultiDay: true,
-  isSingleDayTimed: false,
-  durationDays: 2,
-  googleLink: '',
-  category: 'uncategorized',
-  color: '#9CA3AF',
-}
-
 describe('useCalendarEvents', () => {
   beforeEach(() => {
-    localStorage.clear()
     fetchEventsForYearMock.mockReset()
   })
 
@@ -41,17 +24,27 @@ describe('useCalendarEvents', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('uses cached data immediately', async () => {
-    setCachedEvents(2026, [cachedEvent], 'primary')
+  it('always fetches fresh data (caching disabled)', async () => {
+    fetchEventsForYearMock.mockResolvedValueOnce([
+      {
+        id: '1',
+        summary: "Mom's birthday",
+        start: { date: '2026-06-10' },
+        end: { date: '2026-06-11' },
+        status: 'confirmed',
+        htmlLink: '',
+      },
+    ])
 
     const { result } = renderHook(() => useCalendarEvents('token', 2026, CALENDAR_IDS))
 
-    await waitFor(() => expect(result.current.isFromCache).toBe(true))
-    expect(result.current.events).toHaveLength(1)
-    expect(fetchEventsForYearMock).not.toHaveBeenCalled()
+    // Always fetches from API since caching is disabled
+    await waitFor(() => expect(fetchEventsForYearMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(result.current.events).toHaveLength(1))
+    expect(result.current.isFromCache).toBe(false)
   })
 
-  it('fetches when cache is missing and allows refresh', async () => {
+  it('fetches events and allows refresh', async () => {
     fetchEventsForYearMock.mockResolvedValueOnce([
       {
         id: '1',

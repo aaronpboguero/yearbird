@@ -173,15 +173,12 @@ describe('auth service', () => {
 
     localStorage.setItem('yearbird:accessToken', 'token')
     localStorage.setItem('yearbird:expiresAt', String(Date.now() + 60_000))
-    localStorage.setItem('yearbird:events:2025', JSON.stringify({ events: [], timestamp: Date.now() }))
-    localStorage.setItem('yearbird:filters', JSON.stringify(['personal']))
 
     auth.signOut()
 
     expect(revoke).toHaveBeenCalled()
     expect(localStorage.getItem('yearbird:accessToken')).toBeNull()
-    expect(localStorage.getItem('yearbird:events:2025')).toBeNull()
-    expect(localStorage.getItem('yearbird:filters')).toBe(JSON.stringify(['personal']))
+    // Note: event caches are no longer stored in localStorage (caching disabled)
   })
 
   it('clears stored auth explicitly including scopes', async () => {
@@ -190,13 +187,12 @@ describe('auth service', () => {
     localStorage.setItem('yearbird:accessToken', 'token')
     localStorage.setItem('yearbird:expiresAt', String(Date.now() + 60_000))
     localStorage.setItem('yearbird:grantedScopes', 'https://www.googleapis.com/auth/calendar.readonly')
-    localStorage.setItem('yearbird:events:2025', JSON.stringify({ timestamp: Date.now(), events: [] }))
 
     auth.clearStoredAuth()
 
     expect(localStorage.getItem('yearbird:accessToken')).toBeNull()
     expect(localStorage.getItem('yearbird:grantedScopes')).toBeNull()
-    expect(localStorage.getItem('yearbird:events:2025')).toBeNull()
+    // Note: event caches are no longer stored in localStorage (caching disabled)
   })
 
   it('signIn returns unavailable when not initialized', async () => {

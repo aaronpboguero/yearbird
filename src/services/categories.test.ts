@@ -6,12 +6,15 @@ import {
   removeCategory,
   resetToDefaults,
   restoreDefault,
+  setCategories,
+  subscribeToCategories,
   updateCategory,
 } from './categories'
 
 describe('categories service', () => {
   beforeEach(() => {
-    localStorage.clear()
+    // Reset in-memory state before each test
+    resetToDefaults()
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-15T12:00:00Z'))
   })
@@ -41,73 +44,127 @@ describe('categories service', () => {
       })
     })
 
-    it('migrates from legacy disabled-built-in-categories', () => {
-      localStorage.setItem('yearbird:disabled-built-in-categories', JSON.stringify(['work', 'races']))
+  })
+
+  describe('setCategories', () => {
+    it('replaces all categories', () => {
+      const now = Date.now()
+      setCategories([
+        {
+          id: 'custom-1',
+          label: 'Custom Category',
+          color: '#112233',
+          keywords: ['test'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: false,
+        },
+      ])
 
       const categories = getCategories()
-      expect(categories.map((c) => c.id)).toEqual(['birthdays', 'family', 'holidays'])
-      expect(localStorage.getItem('yearbird:disabled-built-in-categories')).toBeNull()
-      expect(localStorage.getItem('yearbird:categories')).not.toBeNull()
+      expect(categories).toHaveLength(1)
+      expect(categories[0].label).toBe('Custom Category')
     })
 
-    it('migrates from legacy custom-categories', () => {
-      localStorage.setItem(
-        'yearbird:custom-categories',
-        JSON.stringify({
-          version: 1,
-          categories: [
-            {
-              id: 'custom-123',
-              label: 'My Category',
-              color: '#123456',
-              keywords: ['test'],
-              matchMode: 'any',
-              createdAt: 1000,
-              updatedAt: 1000,
-            },
-          ],
-        })
+    it('sanitizes and deduplicates categories by label', () => {
+      const now = Date.now()
+      setCategories([
+        {
+          id: 'test-1',
+          label: 'Test',
+          color: '#112233',
+          keywords: ['test'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: false,
+        },
+        {
+          id: 'test-2',
+          label: 'test', // Same label, different case - should be deduplicated
+          color: '#445566',
+          keywords: ['other'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now + 1, // Newer, so this one wins
+          isDefault: false,
+        },
+      ])
+
+      const categories = getCategories()
+      expect(categories).toHaveLength(1)
+      expect(categories[0].id).toBe('test-2') // Newer one wins
+    })
+
+    it('notifies subscribers when categories change', () => {
+      const listener = vi.fn()
+      subscribeToCategories(listener)
+
+      const now = Date.now()
+      setCategories([
+        {
+          id: 'new-cat',
+          label: 'New',
+          color: '#112233',
+          keywords: ['new'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: false,
+        },
+      ])
+
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(listener).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'new-cat', label: 'New' }),
+        ])
       )
-
-      const categories = getCategories()
-      expect(categories).toHaveLength(6) // 5 defaults + 1 custom
-      expect(categories.find((c) => c.id === 'custom-123')).toMatchObject({
-        id: 'custom-123',
-        label: 'My Category',
-        isDefault: false,
-      })
-      expect(localStorage.getItem('yearbird:custom-categories')).toBeNull()
     })
+  })
 
-    it('migrates from both legacy formats', () => {
-      localStorage.setItem('yearbird:disabled-built-in-categories', JSON.stringify(['work']))
-      localStorage.setItem(
-        'yearbird:custom-categories',
-        JSON.stringify({
-          version: 1,
-          categories: [
-            {
-              id: 'custom-abc',
-              label: 'Custom',
-              color: '#AABBCC',
-              keywords: ['custom'],
-              matchMode: 'all',
-              createdAt: 2000,
-              updatedAt: 2000,
-            },
-          ],
-        })
-      )
+  describe('subscribeToCategories', () => {
+    it('returns unsubscribe function', () => {
+      const listener = vi.fn()
+      const unsubscribe = subscribeToCategories(listener)
 
-      const categories = getCategories()
-      expect(categories.map((c) => c.id)).toContain('custom-abc')
-      expect(categories.map((c) => c.id)).not.toContain('work')
-      expect(categories).toHaveLength(5) // 4 defaults + 1 custom
-    })
+      // Trigger a change
+      const now = Date.now()
+      setCategories([
+        {
+          id: 'cat-1',
+          label: 'Cat',
+          color: '#112233',
+          keywords: ['cat'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: false,
+        },
+      ])
 
-    it('persists categories after first read', () => {
-      getCategories()
-      expect(localStorage.getItem('yearbird:categories')).not.toBeNull()
+      expect(listener).toHaveBeenCalledTimes(1)
+
+      // Unsubscribe
+      unsubscribe()
+
+      // Trigger another change
+      setCategories([
+        {
+          id: 'cat-2',
+          label: 'Cat2',
+          color: '#445566',
+          keywords: ['cat2'],
+          matchMode: 'any',
+          createdAt: now,
+          updatedAt: now,
+          isDefault: false,
+        },
+      ])
+
+      // Listener should not have been called again
+      expect(listener).toHaveBeenCalledTimes(1)
     })
   })
 
