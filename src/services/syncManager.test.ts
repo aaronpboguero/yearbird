@@ -305,9 +305,10 @@ describe('syncManager', () => {
       const disabledCalendars = JSON.parse(localStorage.getItem('yearbird:disabled-calendars') || '[]')
       expect(disabledCalendars).toEqual(config.disabledCalendars)
 
-      // Should write unified categories
-      const categories = JSON.parse(localStorage.getItem('yearbird:categories') || '[]')
-      expect(categories).toEqual(config.categories)
+      // Should write unified categories in wrapped format
+      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
+      expect(stored.version).toBe(1)
+      expect(stored.categories).toEqual(config.categories)
 
       // Legacy keys should be removed
       expect(localStorage.getItem('yearbird:disabled-built-in-categories')).toBeNull()
@@ -853,13 +854,15 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '[]')
-      expect(stored).toHaveLength(1)
-      expect(stored[0].label).toBe('Test Category')
+      // Categories are stored in wrapped format: { version: 1, categories: [...] }
+      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
+      expect(stored.version).toBe(1)
+      expect(stored.categories).toHaveLength(1)
+      expect(stored.categories[0].label).toBe('Test Category')
     })
 
     it('handles empty categories array', () => {
-      localStorage.setItem('yearbird:categories', JSON.stringify([{ id: 'old' }]))
+      localStorage.setItem('yearbird:categories', JSON.stringify({ version: 1, categories: [{ id: 'old' }] }))
 
       const config: CloudConfigV2 = {
         version: 2,
@@ -872,9 +875,10 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(config)
 
-      // Even empty categories should write an empty array
-      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '[]')
-      expect(stored).toEqual([])
+      // Even empty categories should write wrapped format with empty array
+      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
+      expect(stored.version).toBe(1)
+      expect(stored.categories).toEqual([])
     })
 
     it('migrates v1 to v2 when applying', () => {
@@ -900,8 +904,10 @@ describe('syncManager', () => {
 
       applyCloudConfigToLocal(configV1)
 
-      // Should write unified categories (defaults minus disabled + custom)
-      const stored = JSON.parse(localStorage.getItem('yearbird:categories') || '[]')
+      // Should write unified categories (defaults minus disabled + custom) in wrapped format
+      const raw = JSON.parse(localStorage.getItem('yearbird:categories') || '{}')
+      expect(raw.version).toBe(1)
+      const stored = raw.categories || []
       expect(stored.find((c: { id: string }) => c.id === 'custom-1')).toBeDefined()
       // Work was disabled, so it shouldn't be in categories
       expect(stored.find((c: { id: string }) => c.id === 'work')).toBeUndefined()

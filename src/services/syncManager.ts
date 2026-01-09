@@ -286,6 +286,14 @@ function ensureV2(config: CloudConfig): CloudConfigV2 {
  *   to properly handle deletions (union would resurrect deleted items)
  * - Categories merge by ID with per-item updatedAt for granular conflict resolution
  *
+ * IMPORTANT: Category Deletion Behavior
+ * Categories use per-item merge without tombstone tracking. This means:
+ * - If you delete a category locally, it's removed from local storage
+ * - But if remote still has it (from another device), it will be re-added on next sync
+ * - To permanently delete across devices, all devices must delete the same category
+ * - This is a trade-off: simpler implementation, but deletions don't propagate
+ * - Future enhancement: add tombstone tracking with deletedAt timestamps
+ *
  * Both configs are migrated to v2 before merging if needed.
  */
 export function mergeConfigs(
@@ -360,7 +368,21 @@ export function applyCloudConfigToLocal(config: CloudConfig): void {
     }
 
     // Write unified categories (v2 format)
-    localStorage.setItem('yearbird:categories', JSON.stringify(v2Config.categories))
+    // Must wrap in StoredCategories format that getCategories() expects
+    const storedCategories = {
+      version: 1, // Local storage version (not cloud config version)
+      categories: v2Config.categories.map((cat) => ({
+        id: cat.id,
+        label: cat.label,
+        color: cat.color,
+        keywords: cat.keywords,
+        matchMode: cat.matchMode,
+        createdAt: cat.createdAt,
+        updatedAt: cat.updatedAt,
+        isDefault: cat.isDefault ?? false,
+      })),
+    }
+    localStorage.setItem('yearbird:categories', JSON.stringify(storedCategories))
 
     // Clean up legacy keys (they will be migrated on next read if needed)
     localStorage.removeItem('yearbird:disabled-built-in-categories')

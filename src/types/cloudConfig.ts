@@ -1,4 +1,3 @@
-import type { BuiltInCategory, CustomCategoryId } from './calendar'
 import type { CategoryMatchMode } from './categories'
 
 /**
@@ -11,10 +10,24 @@ export interface EventFilter {
 }
 
 /**
- * Custom category definition (matches existing CustomCategory type)
+ * Unified category definition for cloud storage (v2).
+ */
+export interface CloudCategory {
+  id: string
+  label: string
+  color: string
+  keywords: string[]
+  matchMode: CategoryMatchMode
+  createdAt: number
+  updatedAt: number
+  isDefault?: boolean
+}
+
+/**
+ * Legacy custom category definition (v1).
  */
 export interface CloudCustomCategory {
-  id: CustomCategoryId
+  id: string
   label: string
   color: string
   keywords: string[]
@@ -24,26 +37,37 @@ export interface CloudCustomCategory {
 }
 
 /**
- * Cloud configuration stored in Google Drive appDataFolder.
- * Single file for atomic updates and simpler sync logic.
+ * Cloud configuration v1 (legacy format).
+ * Kept for backward compatibility and migration.
  */
-export interface CloudConfig {
-  /** Schema version for future migrations */
+export interface CloudConfigV1 {
   version: 1
-  /** Timestamp of last update (ms since epoch) */
   updatedAt: number
-  /** Device identifier that last wrote this config */
   deviceId: string
-
-  /** Hidden event patterns */
   filters: EventFilter[]
-  /** Disabled calendar IDs */
   disabledCalendars: string[]
-  /** Disabled built-in category names */
-  disabledBuiltInCategories: BuiltInCategory[]
-  /** User-defined category rules */
+  disabledBuiltInCategories: string[]
   customCategories: CloudCustomCategory[]
 }
+
+/**
+ * Cloud configuration v2 (unified categories).
+ */
+export interface CloudConfigV2 {
+  version: 2
+  updatedAt: number
+  deviceId: string
+  filters: EventFilter[]
+  disabledCalendars: string[]
+  categories: CloudCategory[]
+}
+
+/**
+ * Cloud configuration stored in Google Drive appDataFolder.
+ * Single file for atomic updates and simpler sync logic.
+ * Supports both v1 (legacy) and v2 (unified) schemas.
+ */
+export type CloudConfig = CloudConfigV1 | CloudConfigV2
 
 /**
  * Cloud sync settings stored in localStorage

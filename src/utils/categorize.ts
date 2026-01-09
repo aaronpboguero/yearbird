@@ -1,54 +1,53 @@
-import { CATEGORIES, DEFAULT_CATEGORY } from '../config/categories'
-import type { CategoryConfig, CategoryMatchMode, CustomCategory } from '../types/categories'
-import type { BuiltInCategory, EventCategory } from '../types/calendar'
+import { DEFAULT_CATEGORY } from '../config/categories'
+import { UNCATEGORIZED_CATEGORY } from '../services/categories'
+import type { Category, CategoryConfig, CategoryMatchMode } from '../types/categories'
+import type { EventCategory } from '../types/calendar'
 
 const DEFAULT_MATCH_MODE: CategoryMatchMode = 'any'
 
-const toCustomCategoryConfig = (category: CustomCategory): CategoryConfig => ({
+/**
+ * Convert a Category to CategoryConfig for display and matching.
+ */
+const toCategoryConfig = (category: Category): CategoryConfig => ({
   category: category.id,
   color: category.color,
   keywords: category.keywords,
   label: category.label,
   matchMode: category.matchMode,
-  isCustom: true,
 })
 
-const sortCustomCategories = (customCategories: CustomCategory[]) =>
-  [...customCategories].sort((a, b) =>
+/**
+ * Sort categories alphabetically by label.
+ */
+const sortCategories = (categories: Category[]): Category[] =>
+  [...categories].sort((a, b) =>
     a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
   )
 
-const filterBuiltInCategories = (disabledBuiltIns: BuiltInCategory[]) => {
-  if (disabledBuiltIns.length === 0) {
-    return CATEGORIES
-  }
-  const disabledSet = new Set(disabledBuiltIns)
-  return CATEGORIES.filter((category) => !disabledSet.has(category.category))
+/**
+ * Get all categories for display (legend, etc.), including uncategorized at the end.
+ */
+export function getAllCategories(categories: Category[] = []): CategoryConfig[] {
+  const sorted = sortCategories(categories).map(toCategoryConfig)
+  return [...sorted, toCategoryConfig(UNCATEGORIZED_CATEGORY)]
 }
 
-export function getAllCategories(
-  customCategories: CustomCategory[] = [],
-  disabledBuiltIns: BuiltInCategory[] = []
-): CategoryConfig[] {
-  const customConfigs = sortCustomCategories(customCategories).map(toCustomCategoryConfig)
-  const builtIns = filterBuiltInCategories(disabledBuiltIns)
-  return [...builtIns, ...customConfigs, DEFAULT_CATEGORY]
+/**
+ * Get categories for event matching (excludes uncategorized).
+ * Categories are sorted alphabetically by label for consistent priority.
+ */
+export function getCategoryMatchList(categories: Category[] = []): CategoryConfig[] {
+  return sortCategories(categories).map(toCategoryConfig)
 }
 
-export function getCategoryMatchList(
-  customCategories: CustomCategory[] = [],
-  disabledBuiltIns: BuiltInCategory[] = []
-): CategoryConfig[] {
-  const customConfigs = sortCustomCategories(customCategories).map(toCustomCategoryConfig)
-  const builtIns = filterBuiltInCategories(disabledBuiltIns)
-  return [...customConfigs, ...builtIns]
-}
-
+/**
+ * Check if a title matches the keywords based on the match mode.
+ */
 const matchesKeywords = (
   lowerTitle: string,
   keywords: string[],
   matchMode: CategoryMatchMode
-) => {
+): boolean => {
   if (keywords.length === 0) {
     return false
   }
@@ -60,9 +59,13 @@ const matchesKeywords = (
   return keywords.some((keyword) => lowerTitle.includes(keyword.toLowerCase()))
 }
 
+/**
+ * Categorize an event by its title.
+ * Returns the first matching category or uncategorized.
+ */
 export function categorizeEvent(
   title: string,
-  categories: CategoryConfig[] = getCategoryMatchList()
+  categories: CategoryConfig[] = []
 ): { category: EventCategory; color: string } {
   const lowerTitle = title.toLowerCase()
 
@@ -82,9 +85,12 @@ export function categorizeEvent(
   }
 }
 
+/**
+ * Get the configuration for a specific category by ID.
+ */
 export function getCategoryConfig(
   category: EventCategory,
-  categories: CategoryConfig[] = getAllCategories()
+  categories: CategoryConfig[] = []
 ): CategoryConfig {
   return categories.find((config) => config.category === category) ?? DEFAULT_CATEGORY
 }
