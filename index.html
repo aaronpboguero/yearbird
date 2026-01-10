@@ -107,9 +107,12 @@
     </script>
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <!-- Prevent FOUC: hide fallback content immediately when JS available -->
-    <script>document.documentElement.classList.add('js')</script>
-    <style>.js [data-fallback] { display: none; }</style>
+    <!--
+      NOTE: We intentionally do NOT hide fallback content with JS.
+      React will naturally replace it when it mounts.
+      This ensures crawlers (including Google's OAuth verifier) see the content
+      even if they snapshot the page before React hydrates.
+    -->
   </head>
   <body class="m-0 p-0">
     <!--
