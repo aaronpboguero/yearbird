@@ -764,7 +764,37 @@ export function LandingPage({
               control.
             </p>
 
-            <div className="mt-10 flex flex-col items-center gap-5">
+            {/* App features summary - shown prominently for Google verification */}
+            <div className="mx-auto mt-8 grid max-w-2xl grid-cols-2 gap-4 text-left sm:grid-cols-4">
+              <div className="rounded-xl bg-white/60 px-4 py-3 text-center">
+                <p className="text-2xl font-semibold text-emerald-600">365</p>
+                <p className="text-xs text-zinc-500">Days at a glance</p>
+              </div>
+              <div className="rounded-xl bg-white/60 px-4 py-3 text-center">
+                <p className="text-2xl font-semibold text-sky-600">100%</p>
+                <p className="text-xs text-zinc-500">Client-side</p>
+              </div>
+              <div className="rounded-xl bg-white/60 px-4 py-3 text-center">
+                <p className="text-2xl font-semibold text-amber-600">0</p>
+                <p className="text-xs text-zinc-500">Data on servers</p>
+              </div>
+              <div className="rounded-xl bg-white/60 px-4 py-3 text-center">
+                <p className="text-2xl font-semibold text-violet-600">MIT</p>
+                <p className="text-xs text-zinc-500">Open source</p>
+              </div>
+            </div>
+
+            <a
+              href="#features"
+              className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-zinc-500 transition hover:text-zinc-700"
+            >
+              See how it works
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </a>
+
+            <div className="mt-6 flex flex-col items-center gap-5">
               {/* Show auth notice, but not GIS unavailable message when TV mode is active */}
               {authNotice && !(showTvMode && isGisUnavailable) ? (
                 <div
