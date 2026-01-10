@@ -150,7 +150,7 @@ const faqItems: FaqItem[] = [
     id: 'data-storage',
     question: 'Where is my calendar data stored?',
     answer:
-      'Your calendar data is never stored on our servers. Yearbird is a client-side application, which means all data processing happens entirely in your web browser. When you sign in, your browser communicates directly with Google\'s servers to fetch your calendar data. We have no servers that receive, store, or process your personal information.',
+      'Your calendar data is never stored on any servers. Yearbird is a client-side application, which means all data processing happens entirely in your web browser. When you sign in, your browser communicates directly with Google\'s servers to fetch your calendar data. We have no servers that receive, store, or process your personal information.',
   },
   {
     id: 'modify-calendar',
@@ -529,6 +529,13 @@ function useScrollRevealZoom(
 
       // Animation completes over this many pixels of scroll
       const animationRange = rect.height * triggerEnd
+
+      // Guard against division by zero when element has no height (not yet rendered)
+      if (animationRange <= 0) {
+        setProgress(0)
+        return
+      }
+
       const rawProgress = pixelsPastTrigger / animationRange
 
       // Clamp between 0 and 1, then apply easing
