@@ -798,6 +798,22 @@ export function LandingPage({
                   ) : null}
                 </div>
               ) : null}
+              {/* Explicit data usage disclosure for Google verification */}
+              <div className="w-full max-w-xl rounded-2xl border border-zinc-200 bg-white/60 px-5 py-4 text-left text-sm text-zinc-600">
+                <p className="font-medium text-zinc-800">How Yearbird uses your Google data:</p>
+                <ul className="mt-2 space-y-1 text-xs">
+                  <li>• Requests <strong>read-only</strong> access to your Google Calendar</li>
+                  <li>• Displays your events in a year-at-a-glance view</li>
+                  <li>• <strong>Cannot</strong> modify, delete, or create calendar events</li>
+                  <li>• All data stays in your browser — never sent to any server</li>
+                </ul>
+                <p className="mt-2 text-xs">
+                  <a href="/privacy.html" className="text-emerald-600 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-700">
+                    Read our Privacy Policy
+                  </a>
+                </p>
+              </div>
+
               <button
                 type="button"
                 onClick={handleSignIn}

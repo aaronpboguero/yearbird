@@ -37,6 +37,25 @@
     />
     <title>Yearbird - Plan a year worth winning</title>
 
+    <!-- WebApplication Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Yearbird",
+      "url": "https://yearbird.com",
+      "description": "Yearbird is a calendar visualization app that turns your Google Calendar into a giant year-at-a-glance map with 365 days on one bold screen.",
+      "applicationCategory": "ProductivityApplication",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "permissions": "Requests read-only access to Google Calendar (calendar.readonly scope). Cannot modify, delete, or create calendar events. All data processing happens in the browser."
+    }
+    </script>
+
     <!-- FAQ Structured Data for Google Rich Results -->
     <script type="application/ld+json">
     {
@@ -100,9 +119,22 @@
     -->
     <div id="root">
       <div data-fallback style="max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: system-ui, sans-serif;">
+        <nav style="margin-bottom: 20px; text-align: right;"><a href="/privacy.html" style="margin-right: 15px;">Privacy Policy</a> <a href="https://github.com/mjaverto/yearbird">GitHub</a></nav>
+
         <h1>Yearbird</h1>
         <p><strong>Plan a year worth winning.</strong></p>
         <p>Yearbird is a calendar visualization app that turns your Google Calendar into a giant year-at-a-glance map with 365 days on one bold screen. It is built for founders, athletes, creators, students, and anyone chasing an ambitious year who wants to stay focused and in control.</p>
+
+        <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0; font-weight: 600;">How Yearbird uses your Google data:</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 14px;">
+            <li>Requests <strong>read-only</strong> access to your Google Calendar</li>
+            <li>Displays your events in a year-at-a-glance view</li>
+            <li><strong>Cannot</strong> modify, delete, or create calendar events</li>
+            <li>All data stays in your browser — never sent to any server</li>
+          </ul>
+          <p style="margin: 8px 0 0 0; font-size: 14px;"><a href="/privacy.html">Read our Privacy Policy</a></p>
+        </div>
 
         <h2>What Yearbird Does</h2>
         <ul>
