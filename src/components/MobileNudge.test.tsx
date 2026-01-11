@@ -35,14 +35,14 @@ describe('MobileNudge', () => {
     setViewportWidth(PHONE_MAX_WIDTH)
     render(<MobileNudge />)
 
-    expect(screen.getByText(/365 days on a phone/i)).toBeInTheDocument()
+    expect(screen.getByText(/too many wins/i)).toBeInTheDocument()
   })
 
   it('does not show on tablet/desktop screens', () => {
     setViewportWidth(PHONE_MAX_WIDTH + 1)
     render(<MobileNudge />)
 
-    expect(screen.queryByText(/365 days on a phone/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/too many wins/i)).not.toBeInTheDocument()
   })
 
   it('can be dismissed', async () => {
@@ -55,7 +55,7 @@ describe('MobileNudge', () => {
     // Wait for animation timeout (200ms + buffer)
     await vi.waitFor(
       () => {
-        expect(screen.queryByText(/365 days on a phone/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/too many wins/i)).not.toBeInTheDocument()
       },
       { timeout: 500 }
     )
@@ -82,20 +82,20 @@ describe('MobileNudge', () => {
     setViewportWidth(PHONE_MAX_WIDTH)
     render(<MobileNudge />)
 
-    expect(screen.queryByText(/365 days on a phone/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/too many wins/i)).not.toBeInTheDocument()
   })
 
   it('responds to window resize', () => {
     // Start on phone size
     setViewportWidth(PHONE_MAX_WIDTH)
     const { rerender } = render(<MobileNudge />)
-    expect(screen.getByText(/365 days on a phone/i)).toBeInTheDocument()
+    expect(screen.getByText(/too many wins/i)).toBeInTheDocument()
 
     // Resize to desktop
     setViewportWidth(PHONE_MAX_WIDTH + 100)
     rerender(<MobileNudge />)
 
-    expect(screen.queryByText(/365 days on a phone/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/too many wins/i)).not.toBeInTheDocument()
   })
 
   it('has accessible dismiss button', () => {
