@@ -156,9 +156,10 @@ export function extractCodeFromUrl(): AuthCodeData | null {
   }
 
   // Validate state parameter to prevent CSRF attacks
+  // If we stored a state (initiated OAuth flow), callback MUST have matching state
   const storedState = consumeOAuthState()
-  if (returnedState && storedState && returnedState !== storedState) {
-    // State mismatch - possible CSRF attack, reject the code
+  if (storedState && (!returnedState || returnedState !== storedState)) {
+    // State missing or mismatch - possible CSRF attack, reject the code
     log.warn('OAuth state mismatch - possible CSRF attack')
     return null
   }
@@ -285,8 +286,9 @@ export function extractTokenFromHash(): TokenData | null {
   }
 
   // Validate state parameter to prevent CSRF attacks
+  // If we stored a state (initiated OAuth flow), callback MUST have matching state
   const storedState = consumeOAuthState()
-  if (returnedState && storedState && returnedState !== storedState) {
+  if (storedState && (!returnedState || returnedState !== storedState)) {
     log.warn('OAuth state mismatch - possible CSRF attack')
     return null
   }

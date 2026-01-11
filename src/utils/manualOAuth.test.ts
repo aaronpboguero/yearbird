@@ -371,16 +371,13 @@ describe('manualOAuth', () => {
       expect(result).toBeNull()
     })
 
-    it('accepts token when no state in hash but stored state exists (legacy flow)', () => {
+    it('rejects token when no state in hash but stored state exists (CSRF protection)', () => {
       mockSessionStorage['yearbird:oauthState'] = 'stored-state'
       window.location.hash = '#access_token=test-token&expires_in=3600'
       const result = extractTokenFromHash()
-      // Token accepted - state validation only fails on mismatch, not missing
-      expect(result).toEqual({
-        accessToken: 'test-token',
-        expiresIn: 3600,
-        scope: undefined,
-      })
+      // Token rejected - if we stored a state, the callback MUST have matching state
+      // Missing state when expected is a potential CSRF attack
+      expect(result).toBeNull()
     })
 
     it('accepts token when state in hash but no stored state (cross-tab scenario)', () => {

@@ -284,11 +284,11 @@ export function initializeAuth(
       }
 
       // Validate state parameter for CSRF protection
-      // Note: GIS popup flow may not return state in the response, so we
-      // only validate if both are present. The popup flow has other security
-      // measures (origin verification, postmessage channel).
+      // If we set a state (initiated auth flow), callback MUST have matching state
+      // The popup flow has other security measures (origin verification, postmessage)
+      // but we enforce state validation when we expect it
       const returnedState = response.state
-      if (returnedState && currentAuthState && returnedState !== currentAuthState) {
+      if (currentAuthState && (!returnedState || returnedState !== currentAuthState)) {
         log.error('Auth state mismatch - possible CSRF attack')
         currentAuthState = null
         errorHandler?.('state_mismatch')

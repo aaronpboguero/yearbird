@@ -690,7 +690,9 @@ async function performDebouncedWrite(): Promise<void> {
  */
 export function handleOnline(): void {
   if (isSyncEnabled()) {
-    performSync()
+    performSync().catch((error) => {
+      log.error('Sync failed after coming online:', error)
+    })
   }
 }
 

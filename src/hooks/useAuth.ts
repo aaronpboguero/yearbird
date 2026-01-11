@@ -15,6 +15,7 @@ import {
 import { exchangeCodeForToken, type TokenResponse } from '../services/tokenExchange'
 import type { AuthState } from '../types/auth'
 import { isFixtureMode } from '../utils/env'
+import { log } from '../utils/logger'
 import {
   buildOAuthRedirectUrl,
   clearHashFromUrl,
@@ -205,7 +206,7 @@ export function useAuth() {
         setAuthNotice(null)
       })
       .catch((error) => {
-        console.error('Token exchange failed:', error)
+        log.error('Token exchange failed:', error)
         setAuthNotice('Sign-in failed. Please try again.')
         setIsReady(true)
       })
