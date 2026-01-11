@@ -62,7 +62,7 @@ export function MobileNudge() {
       <div className="mx-2 mb-2 flex items-center gap-3 rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 shadow-lg backdrop-blur-sm">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-amber-900">
-            365 days on a phone? Your year has too many wins for that screen. 🦅
+            365 days on a phone? Your year has too many wins for this screen. 🦅
           </p>
           <p className="mt-0.5 text-xs text-amber-700/80">
             Yearbird shines on a bigger screen—try desktop for the full view.

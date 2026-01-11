@@ -420,6 +420,8 @@ function MonthRow({
                 singleDayEvents={singleDayEvents}
                 allDayEvents={allDayEvents}
                 timedEvents={timedEvents}
+                allEventsByDate={allDayEventsByDate}
+                allTimedEventsByDate={timedEventsByDate}
                 categories={categories}
                 showTitle={isScrollable}
                 titleDensity={scrollDensity}
@@ -458,6 +460,10 @@ interface DayCellProps {
   allDayEvents?: YearbirdEvent[]
   /** Timed events for the day column view in popover */
   timedEvents?: YearbirdEvent[]
+  /** Map of all-day events by date key for popover navigation */
+  allEventsByDate?: Map<string, YearbirdEvent[]>
+  /** Map of timed events by date key for popover navigation */
+  allTimedEventsByDate?: Map<string, YearbirdEvent[]>
   categories: CategoryConfig[]
   showTitle?: boolean
   titleDensity?: number
@@ -477,6 +483,8 @@ function DayCell({
   singleDayEvents = [],
   allDayEvents = [],
   timedEvents = [],
+  allEventsByDate,
+  allTimedEventsByDate,
   categories,
   showTitle = false,
   titleDensity = 60,
@@ -544,6 +552,8 @@ function DayCell({
             date={date}
             events={allDayEvents}
             timedEvents={timedEvents}
+            allEventsByDate={allEventsByDate}
+            timedEventsByDate={allTimedEventsByDate}
             categories={categories}
             googleCalendarCreateUrl={createUrl}
             googleCalendarDayUrl={dayUrl}

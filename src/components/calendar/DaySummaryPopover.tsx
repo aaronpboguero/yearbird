@@ -1,9 +1,11 @@
 import { Popover, PopoverButton, PopoverPanel, CloseButton } from '@headlessui/react'
+import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
 import type { YearbirdEvent } from '../../types/calendar'
 import type { CategoryConfig } from '../../types/categories'
 import { ExternalLinkIcon } from '../icons/ExternalLinkIcon'
 import { getCategoryConfig } from '../../utils/categorize'
 import { DayColumnView } from './DayColumnView'
+import { buildGoogleCalendarCreateUrl, buildGoogleCalendarDayUrl } from '../../utils/googleCalendar'
 
 interface DaySummaryPopoverProps {
   date: Date
@@ -11,6 +13,10 @@ interface DaySummaryPopoverProps {
   events: YearbirdEvent[]
   /** Single-day timed events (meetings, appointments) for column view */
   timedEvents?: YearbirdEvent[]
+  /** Map of all-day events by date key (YYYY-MM-DD) for navigation */
+  allEventsByDate?: Map<string, YearbirdEvent[]>
+  /** Map of timed events by date key (YYYY-MM-DD) for navigation */
+  timedEventsByDate?: Map<string, YearbirdEvent[]>
   categories: CategoryConfig[]
   googleCalendarCreateUrl: string
   googleCalendarDayUrl: string
@@ -21,14 +27,30 @@ interface DaySummaryPopoverProps {
 const MAX_VISIBLE_EVENTS = 6
 const DATE_FORMAT: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' }
 
+const getDateKey = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const addDays = (date: Date, days: number) => {
+  const result = new Date(date)
+  result.setDate(result.getDate() + days)
+  return result
+}
+
 /**
  * DaySummaryPopover displays a list of events for a clicked day cell.
+ * Supports left/right navigation via arrow buttons or keyboard arrows.
  *
  * Usage:
  * ```tsx
  * <DaySummaryPopover
  *   date={new Date(2025, 0, 15)}
  *   events={eventsForDay}
+ *   allEventsByDate={allDayEventMap}
+ *   timedEventsByDate={timedEventMap}
  *   categories={categoryConfigs}
  *   googleCalendarCreateUrl="https://calendar.google.com/calendar/r/eventedit?dates=20250115/20250116"
  *   googleCalendarDayUrl="https://calendar.google.com/calendar/r/day/2025/1/15"
@@ -42,17 +64,66 @@ export function DaySummaryPopover({
   date,
   events,
   timedEvents,
+  allEventsByDate,
+  timedEventsByDate,
   categories,
   googleCalendarCreateUrl,
   googleCalendarDayUrl,
   children,
   onEventClick,
 }: DaySummaryPopoverProps) {
-  const formattedDate = date.toLocaleDateString('en-US', DATE_FORMAT)
-  const visibleEvents = events.slice(0, MAX_VISIBLE_EVENTS)
-  const overflowCount = events.length - MAX_VISIBLE_EVENTS
+  // Track the currently viewed date (allows navigation while popover stays open)
+  const [currentDate, setCurrentDate] = useState(date)
+
+  // Reset to initial date when the trigger date changes (popover reopened on different day)
+  useEffect(() => {
+    setCurrentDate(date)
+  }, [date])
+
+  // Get events for the current viewing date
+  const currentDateKey = getDateKey(currentDate)
+  const currentAllDayEvents = allEventsByDate?.get(currentDateKey) ?? events
+  const currentTimedEvents = timedEventsByDate?.get(currentDateKey) ?? timedEvents ?? []
+
+  // Generate URLs for current date
+  const currentCreateUrl = allEventsByDate
+    ? buildGoogleCalendarCreateUrl(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+    : googleCalendarCreateUrl
+  const currentDayUrl = allEventsByDate
+    ? buildGoogleCalendarDayUrl(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+    : googleCalendarDayUrl
+
+  const formattedDate = currentDate.toLocaleDateString('en-US', DATE_FORMAT)
+  const visibleEvents = currentAllDayEvents.slice(0, MAX_VISIBLE_EVENTS)
+  const overflowCount = currentAllDayEvents.length - MAX_VISIBLE_EVENTS
   const hasOverflow = overflowCount > 0
-  const hasTimedEvents = timedEvents && timedEvents.length > 0
+  const hasTimedEvents = currentTimedEvents.length > 0
+
+  // Navigation is enabled when event maps are provided
+  const canNavigate = Boolean(allEventsByDate)
+
+  const navigatePrevious = useCallback(() => {
+    setCurrentDate((d) => addDays(d, -1))
+  }, [])
+
+  const navigateNext = useCallback(() => {
+    setCurrentDate((d) => addDays(d, 1))
+  }, [])
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (!canNavigate) return
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        navigatePrevious()
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        navigateNext()
+      }
+    },
+    [canNavigate, navigatePrevious, navigateNext]
+  )
 
   const handleEventClick = (
     event: YearbirdEvent,
@@ -72,10 +143,33 @@ export function DaySummaryPopover({
       <PopoverPanel
         anchor={{ to: 'right start', gap: 12, padding: 16 }}
         className="z-50 w-80 max-h-[80vh] flex flex-col rounded-lg border border-zinc-200 bg-white shadow-lg focus:outline-none"
+        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-zinc-900">{formattedDate}</h3>
+          <div className="flex items-center gap-1">
+            {canNavigate ? (
+              <button
+                type="button"
+                onClick={navigatePrevious}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                aria-label="Previous day"
+              >
+                <ChevronLeftIcon className="size-4" />
+              </button>
+            ) : null}
+            <h3 className="text-sm font-semibold text-zinc-900">{formattedDate}</h3>
+            {canNavigate ? (
+              <button
+                type="button"
+                onClick={navigateNext}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                aria-label="Next day"
+              >
+                <ChevronRightIcon className="size-4" />
+              </button>
+            ) : null}
+          </div>
           <CloseButton
             className="rounded p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             aria-label="Close popover"
@@ -119,7 +213,7 @@ export function DaySummaryPopover({
           {/* Overflow link */}
           {hasOverflow ? (
             <a
-              href={googleCalendarDayUrl}
+              href={currentDayUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 block px-2 text-xs text-zinc-500 transition hover:text-zinc-700 hover:underline"
@@ -135,7 +229,7 @@ export function DaySummaryPopover({
             <div className="px-4 py-2 text-xs font-medium text-zinc-500">Schedule</div>
             <div className="overflow-y-auto px-2 pb-2" style={{ maxHeight: 'calc(80vh - 200px)' }}>
               <DayColumnView
-                events={timedEvents}
+                events={currentTimedEvents}
                 categories={categories}
                 onEventClick={onEventClick}
               />
@@ -146,7 +240,7 @@ export function DaySummaryPopover({
         {/* Footer */}
         <div className="flex items-center gap-2 border-t border-zinc-100 px-4 py-3">
           <a
-            href={googleCalendarDayUrl}
+            href={currentDayUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
@@ -155,7 +249,7 @@ export function DaySummaryPopover({
             <ExternalLinkIcon className="size-3.5" />
           </a>
           <a
-            href={googleCalendarCreateUrl}
+            href={currentCreateUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
@@ -202,6 +296,40 @@ function PlusIcon({ className }: { className?: string }) {
     >
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </svg>
+  )
+}
+
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 18l6-6-6-6" />
     </svg>
   )
 }
