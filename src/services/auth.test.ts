@@ -379,6 +379,159 @@ describe('auth service', () => {
     window.open = originalOpen
   })
 
+  /**
+   * Regression tests for GIS popup flow state handling.
+   *
+   * Google Identity Services (GIS) popup flow with `postmessage` redirect does NOT
+   * reliably return the state parameter in the callback response. This is a known
+   * GIS behavior documented at:
+   * https://github.com/mjaverto/yearbird/commit/f5425a4
+   *
+   * These tests ensure we:
+   * 1. Accept valid auth when GIS doesn't return state (common case)
+   * 2. Still reject auth when state IS returned but doesn't match (CSRF protection)
+   */
+  describe('GIS popup flow state handling', () => {
+    it('accepts auth when GIS callback does not return state parameter', async () => {
+      // This is the critical regression test for the bug fixed in commit f5425a4
+      // GIS popup flow often returns undefined for response.state
+      let capturedCallback: ((response: { code: string; state?: string; error?: string }) => void) | null = null
+      const requestCode = vi.fn()
+      const initCodeClient = vi.fn(
+        (options: { callback: (response: { code: string; state?: string; error?: string }) => void }) => {
+          capturedCallback = options.callback
+          return { requestCode }
+        }
+      )
+
+      globalWithGoogle.google = {
+        accounts: {
+          oauth2: {
+            initCodeClient,
+            revoke: vi.fn(),
+          },
+        },
+      }
+
+      // Mock successful token exchange
+      mockExchangeCodeForToken.mockResolvedValue({
+        access_token: 'test-token',
+        expires_in: 3600,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+      })
+
+      const auth = await loadAuth()
+      const onSuccess = vi.fn()
+      const onError = vi.fn()
+      auth.initializeAuth(onSuccess, onError)
+
+      // Trigger sign-in which sets currentAuthState internally
+      await auth.signIn()
+
+      // Simulate GIS callback WITHOUT state parameter (common GIS behavior)
+      expect(capturedCallback).not.toBeNull()
+      capturedCallback!({ code: 'auth-code-from-google', state: undefined })
+
+      // Wait for async token exchange
+      await vi.waitFor(() => {
+        expect(onSuccess).toHaveBeenCalled()
+      })
+
+      // Should NOT trigger error - this was the bug
+      expect(onError).not.toHaveBeenCalled()
+      expect(mockLogError).not.toHaveBeenCalledWith('Auth state mismatch - possible CSRF attack')
+    })
+
+    it('rejects auth when GIS callback returns mismatched state', async () => {
+      // When state IS returned, we should still validate it for CSRF protection
+      let capturedCallback: ((response: { code: string; state?: string; error?: string }) => void) | null = null
+      const requestCode = vi.fn()
+      const initCodeClient = vi.fn(
+        (options: { callback: (response: { code: string; state?: string; error?: string }) => void }) => {
+          capturedCallback = options.callback
+          return { requestCode }
+        }
+      )
+
+      globalWithGoogle.google = {
+        accounts: {
+          oauth2: {
+            initCodeClient,
+            revoke: vi.fn(),
+          },
+        },
+      }
+
+      const auth = await loadAuth()
+      const onSuccess = vi.fn()
+      const onError = vi.fn()
+      auth.initializeAuth(onSuccess, onError)
+
+      // Trigger sign-in which sets currentAuthState internally
+      await auth.signIn()
+
+      // Simulate GIS callback WITH wrong state (CSRF attack attempt)
+      expect(capturedCallback).not.toBeNull()
+      capturedCallback!({ code: 'auth-code', state: 'attacker-controlled-state' })
+
+      // Should reject with state mismatch error
+      expect(onError).toHaveBeenCalledWith('state_mismatch')
+      expect(onSuccess).not.toHaveBeenCalled()
+      expect(mockLogError).toHaveBeenCalledWith('Auth state mismatch - possible CSRF attack')
+    })
+
+    it('accepts auth when GIS callback returns matching state', async () => {
+      // When state IS returned and matches, auth should succeed
+      let capturedCallback: ((response: { code: string; state?: string; error?: string }) => void) | null = null
+      const requestCode = vi.fn()
+      const initCodeClient = vi.fn(
+        (options: { callback: (response: { code: string; state?: string; error?: string }) => void }) => {
+          capturedCallback = options.callback
+          return { requestCode }
+        }
+      )
+
+      globalWithGoogle.google = {
+        accounts: {
+          oauth2: {
+            initCodeClient,
+            revoke: vi.fn(),
+          },
+        },
+      }
+
+      // Mock successful token exchange
+      mockExchangeCodeForToken.mockResolvedValue({
+        access_token: 'test-token',
+        expires_in: 3600,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+      })
+
+      const auth = await loadAuth()
+      const onSuccess = vi.fn()
+      const onError = vi.fn()
+      auth.initializeAuth(onSuccess, onError)
+
+      // Trigger sign-in
+      await auth.signIn()
+
+      // Capture the state that was passed to requestCode
+      const requestCodeCalls = requestCode.mock.calls
+      const stateFromRequest = requestCodeCalls[requestCodeCalls.length - 1][0].state
+
+      // Simulate GIS callback WITH matching state
+      expect(capturedCallback).not.toBeNull()
+      capturedCallback!({ code: 'auth-code', state: stateFromRequest })
+
+      // Wait for async token exchange
+      await vi.waitFor(() => {
+        expect(onSuccess).toHaveBeenCalled()
+      })
+
+      expect(onError).not.toHaveBeenCalled()
+    })
+  })
+
   describe('requestDriveScope', () => {
     it('returns false when CLIENT_ID is missing', async () => {
       globalWithGoogle.google = undefined
