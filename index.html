@@ -107,12 +107,9 @@
     </script>
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <!--
-      NOTE: We intentionally do NOT hide fallback content with JS.
-      React will naturally replace it when it mounts.
-      This ensures crawlers (including Google's OAuth verifier) see the content
-      even if they snapshot the page before React hydrates.
-    -->
+    <!-- Hide fallback content by default; noscript users still see it -->
+    <style>[data-fallback] { display: none; }</style>
+    <noscript><style>[data-fallback] { display: block; }</style></noscript>
   </head>
   <body class="m-0 p-0">
     <!--
