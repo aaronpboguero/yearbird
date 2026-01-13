@@ -173,13 +173,18 @@ function App() {
     }
 
     hasInitialSynced.current = true
+    log.debug('[App] Starting initial cloud sync...')
 
     performSync().then((result) => {
+      log.debug('[App] Sync result:', result)
       if (result.status === 'success') {
         // Update React state from the now-populated in-memory state
-        setIsMonthScrollEnabled(getMonthScrollEnabled())
+        const weekView = getWeekViewEnabled()
+        const monthScroll = getMonthScrollEnabled()
+        log.debug('[App] Updating React state with:', { weekView, monthScroll })
+        setIsMonthScrollEnabled(monthScroll)
         setMonthScrollDensity(getMonthScrollDensity())
-        setIsWeekViewEnabled(getWeekViewEnabled())
+        setIsWeekViewEnabled(weekView)
         setTimedEventMinHours(getTimedEventMinHours())
         setMatchDescription(getMatchDescription())
       }
