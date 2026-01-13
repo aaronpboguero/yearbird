@@ -25,7 +25,7 @@ const buildImage = (name: string) => ({
   png: `/marketing/${name}.png 1280w, /marketing/${name}-1920.png 1920w`,
 })
 
-const heroImage = buildImage('year-grid')
+const heroImage = buildImage('day-detail-tooltip')
 
 const screenshotRowClass = (reverse: boolean) =>
   [
@@ -884,7 +884,7 @@ export function LandingPage({
                   src={heroImage.src}
                   srcSet={heroImage.png}
                   sizes={HERO_SIZES}
-                  alt="Yearbird full-year calendar view across all 12 months"
+                  alt="Yearbird year-at-a-glance calendar with day detail popover showing event schedule, descriptions, and locations"
                   width={IMAGE_WIDTH}
                   height={IMAGE_HEIGHT}
                   loading="eager"
