@@ -14,7 +14,6 @@ interface LandingPageProps {
 
 const IMAGE_WIDTH = 1280
 const IMAGE_HEIGHT = 831
-const HERO_SIZES = '100vw'
 const SCREENSHOT_SIZES = '(min-width: 1024px) 55vw, (min-width: 640px) 88vw, 92vw'
 const LIGHTBOX_ANIMATION_MS = 220
 
@@ -25,7 +24,8 @@ const buildImage = (name: string) => ({
   png: `/marketing/${name}.png 1280w, /marketing/${name}-1920.png 1920w`,
 })
 
-const heroImage = buildImage('day-detail-tooltip')
+// Hero uses animated GIF to showcase the day-click interaction flow
+const heroGif = '/marketing/demo-day-click.gif'
 
 const screenshotRowClass = (reverse: boolean) =>
   [
@@ -872,26 +872,20 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Hero image - edge-to-edge showcase */}
+        {/* Hero image - edge-to-edge showcase with animated demo */}
         <section className="w-full px-2 pb-28 sm:px-3">
           <div className="reveal relative" style={{ animationDelay: '160ms' }}>
             <div className="absolute -inset-4 rounded-[32px] bg-white/50 blur-3xl sm:-inset-8 sm:rounded-[48px]" aria-hidden="true" />
             <div className="relative overflow-hidden rounded-xl border border-white/70 bg-white/90 shadow-[0_50px_100px_-40px_rgba(15,23,42,0.4)] backdrop-blur sm:rounded-2xl lg:rounded-3xl">
-              <picture>
-                <source type="image/avif" srcSet={heroImage.avif} sizes={HERO_SIZES} />
-                <source type="image/webp" srcSet={heroImage.webp} sizes={HERO_SIZES} />
-                <img
-                  src={heroImage.src}
-                  srcSet={heroImage.png}
-                  sizes={HERO_SIZES}
-                  alt="Yearbird year-at-a-glance calendar with day detail popover showing event schedule, descriptions, and locations"
-                  width={IMAGE_WIDTH}
-                  height={IMAGE_HEIGHT}
-                  loading="eager"
-                  decoding="async"
-                  className="w-full"
-                />
-              </picture>
+              <img
+                src={heroGif}
+                alt="Animated demo showing Yearbird's day-click interaction: clicking a day reveals the event schedule, then clicking an event shows rich details like location and description"
+                width={960}
+                height={540}
+                loading="eager"
+                decoding="async"
+                className="w-full"
+              />
             </div>
           </div>
         </section>

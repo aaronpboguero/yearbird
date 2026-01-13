@@ -191,9 +191,9 @@ export const EventTooltip = forwardRef<HTMLDivElement, EventTooltipProps>(functi
   }, [autoFocus, event.id])
 
   const tooltipStyle = useMemo(() => {
-    // Before we know the tooltip size, position at click point
+    // Before we know the tooltip size, hide it to prevent positioning flash
     if (!viewportSize.width || !viewportSize.height || !tooltipSize.width || !tooltipSize.height) {
-      return { left: position.x + TOOLTIP_OFFSET, top: position.y + TOOLTIP_OFFSET }
+      return { left: position.x + TOOLTIP_OFFSET, top: position.y + TOOLTIP_OFFSET, opacity: 0 }
     }
 
     // Calculate space available in each direction from click point
