@@ -276,7 +276,7 @@ function ensureV2(config: CloudConfig): CloudConfigV2 {
  */
 export function applyCloudConfigToLocal(config: CloudConfig): void {
   const v2Config = ensureV2(config)
-  log.debug('[applyCloudConfigToLocal] Applying:', {
+  console.log('[applyCloudConfigToLocal] Applying:', {
     weekViewEnabled: v2Config.weekViewEnabled,
     monthScrollEnabled: v2Config.monthScrollEnabled,
   })
@@ -316,7 +316,7 @@ export function applyCloudConfigToLocal(config: CloudConfig): void {
     setMonthScrollDensity(v2Config.monthScrollDensity)
   }
 
-  log.debug('[applyCloudConfigToLocal] After apply, displaySettings:', {
+  console.log('[applyCloudConfigToLocal] After apply, displaySettings:', {
     weekViewEnabled: getWeekViewEnabled(),
     monthScrollEnabled: getMonthScrollEnabled(),
   })
@@ -339,20 +339,20 @@ export type SyncResult =
  * Use this on app startup to restore user's settings.
  */
 export async function loadFromCloud(): Promise<SyncResult> {
-  log.debug('[loadFromCloud] Starting...')
+  console.log('[loadFromCloud] Starting...')
 
   if (!isSyncEnabled()) {
-    log.debug('[loadFromCloud] Skipped: sync disabled')
+    console.log('[loadFromCloud] Skipped: sync disabled')
     return { status: 'skipped', reason: 'disabled' }
   }
 
   if (isSyncing) {
-    log.debug('[loadFromCloud] Skipped: already syncing')
+    console.log('[loadFromCloud] Skipped: already syncing')
     return { status: 'skipped', reason: 'already-syncing' }
   }
 
   if (!navigator.onLine) {
-    log.debug('[loadFromCloud] Skipped: offline')
+    console.log('[loadFromCloud] Skipped: offline')
     return { status: 'skipped', reason: 'offline' }
   }
 
@@ -363,33 +363,33 @@ export async function loadFromCloud(): Promise<SyncResult> {
     const canAccess = await checkDriveAccess()
     if (!canAccess) {
       lastSyncError = 'Cannot access Google Drive'
-      log.debug('[loadFromCloud] Error: cannot access Drive')
+      console.log('[loadFromCloud] Error: cannot access Drive')
       return { status: 'error', message: lastSyncError }
     }
 
     const remoteResult = await readCloudConfig()
     if (!remoteResult.success) {
       lastSyncError = remoteResult.error?.message || 'Failed to read from Drive'
-      log.debug('[loadFromCloud] Error reading:', lastSyncError)
+      console.log('[loadFromCloud] Error reading:', lastSyncError)
       return { status: 'error', message: lastSyncError }
     }
 
     if (remoteResult.data) {
       // Cloud has data - apply it to local state
-      log.debug('[loadFromCloud] Cloud data:', {
+      console.log('[loadFromCloud] Cloud data:', {
         weekViewEnabled: remoteResult.data.weekViewEnabled,
         monthScrollEnabled: remoteResult.data.monthScrollEnabled,
       })
       applyCloudConfigToLocal(remoteResult.data)
     } else {
-      log.debug('[loadFromCloud] No cloud data found')
+      console.log('[loadFromCloud] No cloud data found')
     }
     // If cloud is empty, keep local defaults (will be saved on first user change)
 
     return { status: 'success' }
   } catch (error) {
     lastSyncError = error instanceof Error ? error.message : 'Failed to load from cloud'
-    log.debug('[loadFromCloud] Exception:', lastSyncError)
+    console.log('[loadFromCloud] Exception:', lastSyncError)
     return { status: 'error', message: lastSyncError }
   } finally {
     isSyncing = false
@@ -560,7 +560,7 @@ async function performDebouncedWrite(): Promise<void> {
 
   try {
     const localConfig = buildCloudConfigFromLocal()
-    log.debug('[performDebouncedWrite] Writing to cloud:', {
+    console.log('[performDebouncedWrite] Writing to cloud:', {
       weekViewEnabled: localConfig.weekViewEnabled,
       monthScrollEnabled: localConfig.monthScrollEnabled,
     })
