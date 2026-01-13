@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { calculateWeekEventBars } from './WeekGrid'
-import { getWeeksForYear, getDateKeyFromParts } from '../../utils/dateUtils'
+import { calculateWeekEventBars } from './weekGridUtils'
+import { getWeeksForYear } from '../../utils/dateUtils'
 import type { YearbirdEvent } from '../../types/calendar'
 
 // Helper to create a minimal event for testing
