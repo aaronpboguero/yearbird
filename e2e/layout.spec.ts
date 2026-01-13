@@ -94,6 +94,16 @@ test.describe('marketing snapshots (1280)', () => {
       animations: 'disabled',
     })
   })
+
+  test('week view', async ({ page }) => {
+    // Click the week view toggle button
+    await page.getByRole('button', { name: 'Week view' }).click()
+    await page.waitForTimeout(100)
+
+    await expect(page.locator('#root')).toHaveScreenshot('marketing-week-view-1280.png', {
+      animations: 'disabled',
+    })
+  })
 })
 
 // Open Graph / Social sharing images (1200x630 - standard OG ratio 1.91:1)
@@ -153,6 +163,16 @@ test.describe('marketing snapshots (1920)', () => {
     await expect(page.getByRole('textbox', { name: 'Event name to hide' })).toBeVisible()
 
     await expect(page.locator('#root')).toHaveScreenshot('marketing-filters-categories-1920.png', {
+      animations: 'disabled',
+    })
+  })
+
+  test('week view', async ({ page }) => {
+    // Click the week view toggle button
+    await page.getByRole('button', { name: 'Week view' }).click()
+    await page.waitForTimeout(100)
+
+    await expect(page.locator('#root')).toHaveScreenshot('marketing-week-view-1920.png', {
       animations: 'disabled',
     })
   })

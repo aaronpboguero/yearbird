@@ -15,8 +15,15 @@ Repo note: no project board; skip project status updates.
 
 Make sure you verify the change. Use curl to see if the content is on production. Review if GitHub Actions actually finished deploying to main successfully. Just because you finished writing code doesn't mean you're finished with the job. 
 
-Please give the user a summary of the task and the results in a table format using emojis to make it more engaging and easy to understand.
+Please give the user a summary of the problem we're fixing, the high level solution we're implementing, the tasks we're performing, and the results in a table format using emojis to make it more engaging and easy to understand.
 
+⚠️ **Problem:** [problem description]
+
+💡 **Solution:** [high level solution description]
+
+🥇 **Results:** [list of results]
+
+📋 **Tasks:** [list of tasks]
 | Emoji | Description |
 |-------|-------------|
 | 🎉 | Task completed successfully |

@@ -58,6 +58,12 @@ vi.mock('./displaySettings', () => ({
   setShowTimedEvents: vi.fn(),
   getMatchDescription: vi.fn(() => false),
   setMatchDescription: vi.fn(),
+  getWeekViewEnabled: vi.fn(() => false),
+  setWeekViewEnabled: vi.fn(),
+  getMonthScrollEnabled: vi.fn(() => false),
+  setMonthScrollEnabled: vi.fn(),
+  getMonthScrollDensity: vi.fn(() => 60),
+  setMonthScrollDensity: vi.fn(),
 }))
 
 describe('syncManager', () => {
@@ -524,6 +530,44 @@ describe('syncManager', () => {
 
       expect(config.showTimedEvents).toBe(false)
       expect(config.matchDescription).toBe(false)
+    })
+
+    it('includes week view and month scroll settings - regression test', async () => {
+      const displaySettings = await import('./displaySettings')
+      vi.mocked(displaySettings.getWeekViewEnabled).mockReturnValue(true)
+      vi.mocked(displaySettings.getMonthScrollEnabled).mockReturnValue(true)
+      vi.mocked(displaySettings.getMonthScrollDensity).mockReturnValue(80)
+
+      saveSyncSettings({
+        enabled: true,
+        lastSyncedAt: null,
+        deviceId: 'test-device',
+      })
+
+      const config = buildCloudConfigFromLocal()
+
+      expect(config.weekViewEnabled).toBe(true)
+      expect(config.monthScrollEnabled).toBe(true)
+      expect(config.monthScrollDensity).toBe(80)
+    })
+
+    it('includes default values for new display settings - regression test', async () => {
+      const displaySettings = await import('./displaySettings')
+      vi.mocked(displaySettings.getWeekViewEnabled).mockReturnValue(false)
+      vi.mocked(displaySettings.getMonthScrollEnabled).mockReturnValue(false)
+      vi.mocked(displaySettings.getMonthScrollDensity).mockReturnValue(60)
+
+      saveSyncSettings({
+        enabled: true,
+        lastSyncedAt: null,
+        deviceId: 'test-device',
+      })
+
+      const config = buildCloudConfigFromLocal()
+
+      expect(config.weekViewEnabled).toBe(false)
+      expect(config.monthScrollEnabled).toBe(false)
+      expect(config.monthScrollDensity).toBe(60)
     })
   })
 

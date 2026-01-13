@@ -5,10 +5,12 @@ import { ColorLegend } from './components/ColorLegend'
 import { FilterPanel } from './components/FilterPanel'
 import { SettingsIcon } from './components/icons/SettingsIcon'
 import { MonthScrollIcon } from './components/icons/MonthScrollIcon'
+import { WeekViewIcon } from './components/icons/WeekViewIcon'
 import { LandingPage } from './components/LandingPage'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { YearPicker } from './components/YearPicker'
 import { DayHeader } from './components/calendar/DayHeader'
+import { WeekGrid } from './components/calendar/WeekGrid'
 import { YearGrid } from './components/calendar/YearGrid'
 import { Button } from './components/ui/button'
 import { useCalendarEvents } from './hooks/useCalendarEvents'
@@ -22,6 +24,12 @@ import {
   getShowTimedEvents,
   setMatchDescription as saveMatchDescription,
   setShowTimedEvents as saveShowTimedEvents,
+  getWeekViewEnabled,
+  setWeekViewEnabled as saveWeekViewEnabled,
+  getMonthScrollEnabled,
+  setMonthScrollEnabled as saveMonthScrollEnabled,
+  getMonthScrollDensity,
+  setMonthScrollDensity as saveMonthScrollDensity,
 } from './services/displaySettings'
 import { scheduleSyncToCloud } from './services/syncManager'
 import type { EventCategory, YearbirdEvent } from './types/calendar'
@@ -31,8 +39,6 @@ import { getFixedDate } from './utils/env'
 import { log } from './utils/logger'
 
 const HIDDEN_CATEGORIES_KEY = 'yearbird:hidden-categories'
-const SCROLL_ENABLED_KEY = 'yearbird:month-scroll-enabled'
-const SCROLL_DENSITY_KEY = 'yearbird:month-scroll-density'
 const DEFAULT_SCROLL_DENSITY = 60
 const loadHiddenCategories = (knownCategories: Set<string>): EventCategory[] => {
   if (typeof window === 'undefined') {
@@ -66,44 +72,6 @@ const loadHiddenCategories = (knownCategories: Set<string>): EventCategory[] => 
 
 const clampScrollDensity = (value: number) => Math.min(100, Math.max(0, Math.round(value / 10) * 10))
 
-const loadScrollEnabled = () => {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  try {
-    const stored = localStorage.getItem(SCROLL_ENABLED_KEY)
-    if (!stored) {
-      return false
-    }
-    return stored === 'true'
-  } catch (error) {
-    log.debug('Storage access error loading scroll enabled:', error)
-    return false
-  }
-}
-
-const loadScrollDensity = () => {
-  if (typeof window === 'undefined') {
-    return DEFAULT_SCROLL_DENSITY
-  }
-
-  try {
-    const stored = localStorage.getItem(SCROLL_DENSITY_KEY)
-    if (!stored) {
-      return DEFAULT_SCROLL_DENSITY
-    }
-    const parsed = Number(stored)
-    if (!Number.isFinite(parsed)) {
-      return DEFAULT_SCROLL_DENSITY
-    }
-    return clampScrollDensity(parsed)
-  } catch (error) {
-    log.debug('Storage access error loading scroll density:', error)
-    return DEFAULT_SCROLL_DENSITY
-  }
-}
-
 function App() {
   const {
     isAuthenticated,
@@ -123,8 +91,9 @@ function App() {
   const currentYear = now.getFullYear()
   const today = now
   const [selectedYear, setSelectedYear] = useState(currentYear)
-  const [isMonthScrollEnabled, setIsMonthScrollEnabled] = useState(() => loadScrollEnabled())
-  const [monthScrollDensity, setMonthScrollDensity] = useState(() => loadScrollDensity())
+  const [isMonthScrollEnabled, setIsMonthScrollEnabled] = useState(() => getMonthScrollEnabled())
+  const [monthScrollDensity, setMonthScrollDensity] = useState(() => getMonthScrollDensity())
+  const [isWeekViewEnabled, setIsWeekViewEnabled] = useState(() => getWeekViewEnabled())
   const [showTimedEvents, setShowTimedEvents] = useState(() => getShowTimedEvents())
   const [matchDescription, setMatchDescription] = useState(() => getMatchDescription())
   const {
@@ -274,27 +243,25 @@ function App() {
     }
   }, [resolvedHiddenCategories])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      localStorage.setItem(SCROLL_ENABLED_KEY, isMonthScrollEnabled.toString())
-    } catch (error) {
-      log.debug('Storage access error saving scroll enabled:', error)
-    }
-  }, [isMonthScrollEnabled])
+  // Handlers for display settings that sync to cloud
+  const handleSetMonthScrollEnabled = (value: boolean) => {
+    setIsMonthScrollEnabled(value)
+    saveMonthScrollEnabled(value)
+    scheduleSyncToCloud()
+  }
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      localStorage.setItem(SCROLL_DENSITY_KEY, clampScrollDensity(monthScrollDensity).toString())
-    } catch (error) {
-      log.debug('Storage access error saving scroll density:', error)
-    }
-  }, [monthScrollDensity])
+  const handleSetMonthScrollDensity = (value: number) => {
+    const clamped = clampScrollDensity(value)
+    setMonthScrollDensity(clamped)
+    saveMonthScrollDensity(clamped)
+    scheduleSyncToCloud()
+  }
+
+  const handleSetWeekViewEnabled = (value: boolean) => {
+    setIsWeekViewEnabled(value)
+    saveWeekViewEnabled(value)
+    scheduleSyncToCloud()
+  }
 
   // Track whether initial calendar data has loaded
   const hasInitialLoad = useRef(false)
@@ -426,20 +393,36 @@ function App() {
         />
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <Button
-          plain
-          onClick={() => {
-            setIsMonthScrollEnabled((prev) => !prev)
-            setMonthScrollDensity(DEFAULT_SCROLL_DENSITY)
-          }}
-          className={`px-2 py-1 ${isMonthScrollEnabled ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'}`}
-          aria-pressed={isMonthScrollEnabled}
-          title={widthToggleTitle}
-        >
-          <MonthScrollIcon />
-          <span className="sr-only">{widthToggleLabel}</span>
-        </Button>
-        {isMonthScrollEnabled ? (
+        <div className="group relative">
+          <Button
+            plain
+            onClick={() => handleSetWeekViewEnabled(!isWeekViewEnabled)}
+            className={`px-2 py-1 ${isWeekViewEnabled ? 'bg-amber-100 text-amber-700' : 'text-zinc-500'}`}
+            aria-pressed={isWeekViewEnabled}
+          >
+            <WeekViewIcon />
+            <span className="sr-only">{isWeekViewEnabled ? 'Month view' : 'Week view'}</span>
+          </Button>
+          <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+            {isWeekViewEnabled ? 'Month view' : 'Week view'}
+          </span>
+        </div>
+        {!isWeekViewEnabled && (
+          <Button
+            plain
+            onClick={() => {
+              handleSetMonthScrollEnabled(!isMonthScrollEnabled)
+              handleSetMonthScrollDensity(DEFAULT_SCROLL_DENSITY)
+            }}
+            className={`px-2 py-1 ${isMonthScrollEnabled ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'}`}
+            aria-pressed={isMonthScrollEnabled}
+            title={widthToggleTitle}
+          >
+            <MonthScrollIcon />
+            <span className="sr-only">{widthToggleLabel}</span>
+          </Button>
+        )}
+        {!isWeekViewEnabled && isMonthScrollEnabled ? (
           <div className="flex items-center gap-2 rounded-full border border-zinc-200/70 bg-white/90 px-2 py-1 shadow-sm">
             <span className="text-[0.55rem] uppercase tracking-[0.2em] text-zinc-500">
               Density
@@ -451,7 +434,7 @@ function App() {
               step={10}
               value={monthScrollDensity}
               onChange={(event) =>
-                setMonthScrollDensity(clampScrollDensity(Number(event.target.value)))
+                handleSetMonthScrollDensity(Number(event.target.value))
               }
               className="w-20 cursor-pointer accent-zinc-600"
               aria-label="Month density"
@@ -485,23 +468,37 @@ function App() {
       >
         <div className="h-full w-full overflow-hidden p-3 sm:p-4">
           <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-            <div
-              className={`min-h-0 flex-1 ${isMonthScrollEnabled ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'}`}
-            >
-              {isMonthScrollEnabled ? <DayHeader /> : null}
-              <YearGrid
-                year={selectedYear}
-                events={visibleEvents}
-                timedEventsByDate={timedEventsByDate}
-                today={today}
-                onHideEvent={addFilter}
-                categories={categoryList}
-                isScrollable={isMonthScrollEnabled}
-                scrollDensity={monthScrollDensity}
-                showDayHeader={!isMonthScrollEnabled}
-                onReady={handleGridReady}
-              />
-            </div>
+            {isWeekViewEnabled ? (
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                <WeekGrid
+                  year={selectedYear}
+                  events={visibleEvents}
+                  timedEventsByDate={timedEventsByDate}
+                  today={today}
+                  onHideEvent={addFilter}
+                  categories={categoryList}
+                  onReady={handleGridReady}
+                />
+              </div>
+            ) : (
+              <div
+                className={`min-h-0 flex-1 ${isMonthScrollEnabled ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'}`}
+              >
+                {isMonthScrollEnabled ? <DayHeader /> : null}
+                <YearGrid
+                  year={selectedYear}
+                  events={visibleEvents}
+                  timedEventsByDate={timedEventsByDate}
+                  today={today}
+                  onHideEvent={addFilter}
+                  categories={categoryList}
+                  isScrollable={isMonthScrollEnabled}
+                  scrollDensity={monthScrollDensity}
+                  showDayHeader={!isMonthScrollEnabled}
+                  onReady={handleGridReady}
+                />
+              </div>
+            )}
           </div>
         </div>
         <FilterPanel

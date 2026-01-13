@@ -28,6 +28,12 @@ import {
   setShowTimedEvents,
   getMatchDescription,
   setMatchDescription,
+  getWeekViewEnabled,
+  setWeekViewEnabled,
+  getMonthScrollEnabled,
+  setMonthScrollEnabled,
+  getMonthScrollDensity,
+  setMonthScrollDensity,
 } from './displaySettings'
 
 const SYNC_SETTINGS_KEY = 'yearbird:cloud-sync-settings'
@@ -224,6 +230,9 @@ export function buildCloudConfigFromLocal(): CloudConfigV2 {
     categories: cloudCategories,
     showTimedEvents: getShowTimedEvents(),
     matchDescription: getMatchDescription(),
+    weekViewEnabled: getWeekViewEnabled(),
+    monthScrollEnabled: getMonthScrollEnabled(),
+    monthScrollDensity: getMonthScrollDensity(),
   }
 }
 
@@ -278,6 +287,9 @@ export function migrateV1ToV2(config: CloudConfigV1): CloudConfigV2 {
     categories,
     showTimedEvents: config.showTimedEvents,
     matchDescription: config.matchDescription,
+    weekViewEnabled: config.weekViewEnabled,
+    monthScrollEnabled: config.monthScrollEnabled,
+    monthScrollDensity: config.monthScrollDensity,
   }
 }
 
@@ -353,6 +365,15 @@ export function mergeConfigs(
   const matchDescription = remoteIsNewer
     ? remote.matchDescription
     : local.matchDescription
+  const weekViewEnabled = remoteIsNewer
+    ? remoteV2.weekViewEnabled
+    : localV2.weekViewEnabled
+  const monthScrollEnabled = remoteIsNewer
+    ? remoteV2.monthScrollEnabled
+    : localV2.monthScrollEnabled
+  const monthScrollDensity = remoteIsNewer
+    ? remoteV2.monthScrollDensity
+    : localV2.monthScrollDensity
 
   return {
     version: 2,
@@ -363,6 +384,9 @@ export function mergeConfigs(
     categories: Array.from(categoryMap.values()),
     showTimedEvents,
     matchDescription,
+    weekViewEnabled,
+    monthScrollEnabled,
+    monthScrollDensity,
   }
 }
 
@@ -401,6 +425,15 @@ export function applyCloudConfigToLocal(config: CloudConfig): void {
   }
   if (v2Config.matchDescription !== undefined) {
     setMatchDescription(v2Config.matchDescription)
+  }
+  if (v2Config.weekViewEnabled !== undefined) {
+    setWeekViewEnabled(v2Config.weekViewEnabled)
+  }
+  if (v2Config.monthScrollEnabled !== undefined) {
+    setMonthScrollEnabled(v2Config.monthScrollEnabled)
+  }
+  if (v2Config.monthScrollDensity !== undefined) {
+    setMonthScrollDensity(v2Config.monthScrollDensity)
   }
 
   // Update sync settings

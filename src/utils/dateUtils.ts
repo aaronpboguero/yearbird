@@ -13,6 +13,8 @@ export const MONTHS = [
   'Dec',
 ]
 
+export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+
 export const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
 export function isLeapYear(year: number): boolean {
@@ -142,4 +144,104 @@ export function addDays(date: Date, days: number): Date {
   // Normalize to midnight to avoid DST edge cases
   result.setHours(0, 0, 0, 0)
   return result
+}
+
+/**
+ * Gets the Monday-first day index (0=Mon, 6=Sun) from a date.
+ * JavaScript's getDay() returns 0=Sun, so we convert.
+ */
+export function getMondayDayIndex(date: Date): number {
+  const jsDay = date.getDay()
+  return jsDay === 0 ? 6 : jsDay - 1
+}
+
+/**
+ * Represents a single day in the week grid.
+ */
+export interface WeekDay {
+  year: number
+  month: number // 0-indexed
+  day: number
+  dateKey: string
+  isWeekend: boolean
+  isInTargetYear: boolean
+}
+
+/**
+ * Represents a week row in the week grid.
+ */
+export interface WeekData {
+  weekIndex: number
+  days: WeekDay[]
+  /** Month label to show, if this week contains the first day of a month within target year */
+  monthLabel: string | null
+}
+
+/**
+ * Gets the Monday of the week containing the given date.
+ */
+export function getMondayOfWeek(date: Date): Date {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const dayIndex = getMondayDayIndex(result)
+  result.setDate(result.getDate() - dayIndex)
+  return result
+}
+
+/**
+ * Generates all weeks for a given year in the weekend-aligned format.
+ * Starts from the Monday of the week containing Jan 1, ends with the week containing Dec 31.
+ * Each week runs Mon-Sun.
+ */
+export function getWeeksForYear(year: number): WeekData[] {
+  const weeks: WeekData[] = []
+
+  // Find the Monday of the week containing Jan 1
+  const jan1 = new Date(year, 0, 1)
+  let currentMonday = getMondayOfWeek(jan1)
+
+  // Find the last day we need to cover (Dec 31)
+  const dec31 = new Date(year, 11, 31)
+
+  let weekIndex = 0
+  let lastMonthLabelShown = -1
+
+  while (currentMonday <= dec31) {
+    const days: WeekDay[] = []
+    let monthLabelForWeek: string | null = null
+
+    for (let i = 0; i < 7; i++) {
+      const dayDate = addDays(currentMonday, i)
+      const dayYear = dayDate.getFullYear()
+      const dayMonth = dayDate.getMonth()
+      const dayDay = dayDate.getDate()
+      const isInTargetYear = dayYear === year
+
+      // Check if this day is the 1st of a month in the target year
+      // and we haven't shown this month's label yet
+      if (isInTargetYear && dayDay === 1 && dayMonth > lastMonthLabelShown) {
+        monthLabelForWeek = MONTHS[dayMonth]
+        lastMonthLabelShown = dayMonth
+      }
+
+      days.push({
+        year: dayYear,
+        month: dayMonth,
+        day: dayDay,
+        dateKey: getDateKeyFromParts(dayYear, dayMonth + 1, dayDay),
+        isWeekend: i >= 5, // Sat=5, Sun=6 in Mon-first
+        isInTargetYear,
+      })
+    }
+
+    weeks.push({
+      weekIndex,
+      days,
+      monthLabel: monthLabelForWeek,
+    })
+
+    weekIndex++
+    currentMonday = addDays(currentMonday, 7)
+  }
+
+  return weeks
 }

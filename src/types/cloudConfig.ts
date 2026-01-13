@@ -54,6 +54,12 @@ export interface CloudConfigV1 {
   showTimedEvents?: boolean
   /** Match event descriptions for categorization (default: false) */
   matchDescription?: boolean
+  /** Show week view (Mon-Sun columns) instead of month view (default: false) */
+  weekViewEnabled?: boolean
+  /** Enable month scroll mode (default: false) */
+  monthScrollEnabled?: boolean
+  /** Month scroll density - row height in pixels (default: 60) */
+  monthScrollDensity?: number
 }
 
 /**
@@ -72,6 +78,12 @@ export interface CloudConfigV2 {
   showTimedEvents?: boolean
   /** Match event descriptions for categorization (default: false) */
   matchDescription?: boolean
+  /** Show week view (Mon-Sun columns) instead of month view (default: false) */
+  weekViewEnabled?: boolean
+  /** Enable month scroll mode (default: false) */
+  monthScrollEnabled?: boolean
+  /** Month scroll density - row height in pixels (default: 60) */
+  monthScrollDensity?: number
 }
 
 /**

@@ -76,13 +76,23 @@ const screenshotRows = [
     panY: -20, // Pan upward after zoom (only this one gets pan)
   },
   {
+    id: 'week-view',
+    eyebrow: 'Week view',
+    title: 'Scroll through every week of the year.',
+    body: 'Seven columns, Mon–Sun. Weekends on the right. Fifty-two rows of focused, horizontal planning.',
+    image: buildImage('week-view'),
+    alt: 'Week view showing all 52 weeks of the year with Monday through Sunday columns',
+    reverse: true,
+    focalPoint: { x: 50, y: 30 } as FocalPoint, // Center on the week grid
+  },
+  {
     id: 'monthly-focus',
     eyebrow: 'Monthly focus',
     title: 'Zoom in without losing the year.',
     body: 'Stay on the months that decide everything.',
     image: buildImage('month-scroll'),
     alt: 'Month scroll view showing focused months in the year calendar',
-    reverse: true,
+    reverse: false,
     focalPoint: { x: 10, y: 10 } as FocalPoint, // Zoom toward top-left corner
   },
   {
@@ -92,7 +102,7 @@ const screenshotRows = [
     body: 'Stay in flow while decisions are still fresh.',
     image: buildImage('event-tooltip'),
     alt: 'Tooltip detail view highlighting a specific calendar event',
-    reverse: false,
+    reverse: true,
     focalPoint: { x: 50, y: 10 } as FocalPoint, // Zoom toward top-center
   },
 ]

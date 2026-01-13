@@ -30,6 +30,20 @@ vi.mock('./hooks/useFilters', () => ({
   useFilters: vi.fn(),
 }))
 
+// Mock displaySettings - use actual module with spyable functions
+vi.mock('./services/displaySettings', () => ({
+  getShowTimedEvents: vi.fn(() => false),
+  setShowTimedEvents: vi.fn(),
+  getMatchDescription: vi.fn(() => false),
+  setMatchDescription: vi.fn(),
+  getWeekViewEnabled: vi.fn(() => false),
+  setWeekViewEnabled: vi.fn(),
+  getMonthScrollEnabled: vi.fn(() => false),
+  setMonthScrollEnabled: vi.fn(),
+  getMonthScrollDensity: vi.fn(() => 60),
+  setMonthScrollDensity: vi.fn(),
+}))
+
 const useAuthMock = vi.mocked(useAuth)
 const useCalendarEventsMock = vi.mocked(useCalendarEvents)
 const useCalendarListMock = vi.mocked(useCalendarList)
@@ -266,22 +280,39 @@ describe('month scroll preferences', () => {
     setupAuthenticatedEvents([])
   })
 
-  test('restores month scroll preferences from storage', async () => {
-    localStorage.setItem('yearbird:month-scroll-density', '80')
+  test('restores month scroll preferences from displaySettings', async () => {
+    // Import mocked module
+    const displaySettings = await import('./services/displaySettings')
+
+    // Mock displaySettings to return custom density and enabled
+    vi.mocked(displaySettings.getMonthScrollDensity).mockReturnValue(80)
+    vi.mocked(displaySettings.getMonthScrollEnabled).mockReturnValue(true)
 
     render(<App />)
 
     const slider = await screen.findByLabelText('Month density')
     expect((slider as HTMLInputElement).value).toBe('80')
+
+    // Reset mocks
+    vi.mocked(displaySettings.getMonthScrollDensity).mockReturnValue(60)
+    vi.mocked(displaySettings.getMonthScrollEnabled).mockReturnValue(false)
   })
 
-  test('falls back to default density when storage is invalid', async () => {
-    localStorage.setItem('yearbird:month-scroll-density', 'invalid')
+  test('uses default density when displaySettings returns default', async () => {
+    // Import mocked module
+    const displaySettings = await import('./services/displaySettings')
+
+    // displaySettings returns default value
+    vi.mocked(displaySettings.getMonthScrollDensity).mockReturnValue(60)
+    vi.mocked(displaySettings.getMonthScrollEnabled).mockReturnValue(true)
 
     render(<App />)
 
     const slider = await screen.findByLabelText('Month density')
     expect((slider as HTMLInputElement).value).toBe('60')
+
+    // Reset mocks
+    vi.mocked(displaySettings.getMonthScrollEnabled).mockReturnValue(false)
   })
 })
 
