@@ -1,5 +1,10 @@
 import { clearEventCaches } from './cache'
-import { exchangeCodeForToken, type TokenResponse } from './tokenExchange'
+export interface TokenResponse {
+  access_token: string
+  expires_in: number
+  scope: string
+  token_type: string
+}
 import { generateCodeVerifier, generateState } from '../utils/pkce'
 import { log } from '../utils/logger'
 
@@ -7,7 +12,7 @@ import { log } from '../utils/logger'
 export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
 
 /** OAuth scope for read-only calendar access */
-export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly'
 
 /** OAuth scope for app-private Google Drive storage */
 export const DRIVE_APPDATA_SCOPE = 'https://www.googleapis.com/auth/drive.appdata'
@@ -54,7 +59,7 @@ const pendingVerifiers = new Map<string, VerifierEntry>()
 // Track the current pending auth flow's state (for correlating callback)
 let currentAuthState: string | null = null
 
-let codeClient: google.accounts.oauth2.CodeClient | null = null
+let tokenClient: google.accounts.oauth2.TokenClient | null = null
 let successHandler: ((response: TokenResponse) => void) | null = null
 let errorHandler: ((error: string) => void) | null = null
 let signInPopup: Window | null = null
@@ -229,26 +234,9 @@ export function hasClientId() {
 // ============================================================================
 
 /**
- * Initialize the Google OAuth code client for authorization code flow with PKCE.
+ * Initialize the Google OAuth token client for implicit flow.
  *
- * ## PKCE Limitation with GIS
- *
- * Google Identity Services (GIS) `initCodeClient` does not support passing
- * `code_challenge` and `code_challenge_method` parameters directly. For the
- * popup flow with `postmessage` redirect, GIS handles the OAuth flow internally.
- *
- * While we generate and send a `code_verifier` during token exchange, Google's
- * authorization server cannot verify it without the corresponding `code_challenge`.
- * This means PKCE validation is not enforced by Google for the popup flow.
- *
- * However, the popup flow still has security protections:
- * 1. **Origin verification**: GIS validates the requesting origin
- * 2. **postmessage channel**: Auth code is sent via postMessage to the opener
- * 3. **Short-lived codes**: Authorization codes expire quickly
- *
- * For the redirect flow (TV mode), PKCE is fully implemented and verified.
- *
- * @param onSuccess - Callback when token exchange succeeds
+ * @param onSuccess - Callback when token is received
  * @param onError - Callback when auth fails
  * @returns true if initialization succeeded
  */
@@ -259,7 +247,7 @@ export function initializeAuth(
   successHandler = onSuccess
   errorHandler = onError ?? null
 
-  if (codeClient) {
+  if (tokenClient) {
     return true
   }
   if (!CLIENT_ID) {
@@ -270,12 +258,10 @@ export function initializeAuth(
     return false
   }
 
-  codeClient = google.accounts.oauth2.initCodeClient({
+  tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: ALL_SCOPES,
-    ux_mode: 'popup',
-    redirect_uri: 'postmessage', // Required for popup mode
-    callback: async (response: google.accounts.oauth2.CodeResponse) => {
+    callback: (response: google.accounts.oauth2.TokenResponse) => {
       if (response.error) {
         log.error('Auth error:', response.error)
         currentAuthState = null
@@ -284,17 +270,6 @@ export function initializeAuth(
       }
 
       // Validate state parameter for CSRF protection
-      //
-      // IMPORTANT: Google Identity Services (GIS) popup flow with `postmessage` redirect
-      // does NOT reliably return the state parameter in the callback response. This is
-      // a known GIS behavior, not a security issue, because the popup flow has other
-      // protections:
-      // 1. Origin verification: GIS validates the requesting origin
-      // 2. postmessage channel: Auth code is sent via secure postMessage to opener
-      // 3. Short-lived codes: Authorization codes expire quickly
-      //
-      // For redirect flows (TV mode), state IS returned and MUST be validated.
-      // For popup flows, we validate when state IS returned but don't fail when absent.
       const returnedState = response.state
       if (returnedState && currentAuthState && returnedState !== currentAuthState) {
         log.error('Auth state mismatch - possible CSRF attack')
@@ -303,33 +278,19 @@ export function initializeAuth(
         return
       }
 
-      // Note: GIS popup flow does NOT support PKCE because initCodeClient
-      // doesn't allow passing code_challenge to Google's authorization endpoint.
-      // We still generate a verifier for state correlation, but we don't send it
-      // to Google during token exchange (they would reject it with "invalid_grant").
-      // The popup flow has other security protections (origin verification, postmessage).
-      const stateForVerifier = returnedState ?? currentAuthState
-      if (stateForVerifier) {
-        // Clean up the stored verifier even though we don't use it
-        consumePendingVerifier(stateForVerifier)
+      if (returnedState || currentAuthState) {
+        consumePendingVerifier(returnedState ?? currentAuthState!)
       }
 
-      try {
-        // Exchange code for token via Worker (no code_verifier for popup flow)
-        const tokenResponse = await exchangeCodeForToken({
-          code: response.code,
-          // codeVerifier omitted - GIS popup flow doesn't support PKCE
-          redirectUri: 'postmessage',
-        })
-        currentAuthState = null
-        successHandler?.(tokenResponse)
-      } catch (error) {
-        log.error('Token exchange failed:', error)
-        currentAuthState = null
-        errorHandler?.('token_exchange_failed')
-      }
+      currentAuthState = null
+      successHandler?.({
+        access_token: response.access_token,
+        expires_in: response.expires_in,
+        scope: response.scope,
+        token_type: response.token_type,
+      })
     },
-    error_callback: (error: google.accounts.oauth2.CodeError) => {
+    error_callback: (error: google.accounts.oauth2.TokenError) => {
       log.error('Auth error callback:', error)
       currentAuthState = null
       errorHandler?.(error.type)
@@ -344,13 +305,13 @@ export function initializeAuth(
 // ============================================================================
 
 /**
- * Initiate sign-in flow using authorization code with PKCE.
+ * Initiate sign-in flow using implicit flow.
  */
 export async function signIn(): Promise<SignInStatus> {
-  if (!codeClient && successHandler) {
+  if (!tokenClient && successHandler) {
     initializeAuth(successHandler, errorHandler ?? undefined)
   }
-  if (!codeClient) {
+  if (!tokenClient) {
     log.warn('Google Identity Services not ready')
     return 'unavailable'
   }
@@ -373,19 +334,15 @@ export async function signIn(): Promise<SignInStatus> {
     }, POPUP_DETECTION_TIMEOUT_MS)
   }
 
-  // Generate PKCE code verifier and state
-  const codeVerifier = generateCodeVerifier()
+  // Generate state for CSRF protection
   const state = generateState()
 
-  // Store verifier correlated with state for later retrieval
-  storePendingVerifier(state, codeVerifier)
+  // Store state for later retrieval
+  storePendingVerifier(state, 'implicit_flow')
   currentAuthState = state
 
-  // Request authorization code
-  // Note: GIS initCodeClient doesn't support code_challenge parameter directly.
-  // The code_verifier will be sent during token exchange, but Google cannot
-  // verify it without the challenge. See initializeAuth docs for details.
-  codeClient.requestCode({
+  // Request access token
+  tokenClient.requestAccessToken({
     hint: '', // Allow account selection
     state, // CSRF protection
   })
@@ -495,18 +452,15 @@ export async function requestDriveScope(): Promise<boolean> {
   }
 
   return new Promise((resolve) => {
-    const verifier = generateCodeVerifier()
     const state = generateState()
 
-    // Store verifier for this request
-    storePendingVerifier(state, verifier)
+    // Store state for this request
+    storePendingVerifier(state, 'implicit_flow')
 
-    const client = google.accounts.oauth2.initCodeClient({
+    const client = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: ALL_SCOPES,
-      ux_mode: 'popup',
-      redirect_uri: 'postmessage',
-      callback: async (response: google.accounts.oauth2.CodeResponse) => {
+      callback: (response: google.accounts.oauth2.TokenResponse) => {
         if (response.error) {
           log.error('Drive scope request failed:', response.error)
           resolve(false)
@@ -520,37 +474,31 @@ export async function requestDriveScope(): Promise<boolean> {
           return
         }
 
-        const codeVerifier = consumePendingVerifier(state)
-        if (!codeVerifier) {
-          log.error('No verifier for drive scope request')
-          resolve(false)
-          return
-        }
+        consumePendingVerifier(state)
 
         try {
-          const tokenResponse = await exchangeCodeForToken({
-            code: response.code,
-            codeVerifier,
-            redirectUri: 'postmessage',
-          })
-
           // Store the new token with updated scopes
-          storeAuth(tokenResponse.access_token, tokenResponse.expires_in, tokenResponse.scope)
+          storeAuth(response.access_token, response.expires_in, response.scope)
 
           // Notify the main auth handler if set
           if (successHandler) {
-            successHandler(tokenResponse)
+            successHandler({
+              access_token: response.access_token,
+              expires_in: response.expires_in,
+              scope: response.scope,
+              token_type: response.token_type,
+            })
           }
 
           // Check if Drive scope was actually granted
-          const granted = tokenResponse.scope.includes(DRIVE_APPDATA_SCOPE)
+          const granted = response.scope.includes(DRIVE_APPDATA_SCOPE)
           resolve(granted)
         } catch (error) {
           log.error('Token exchange failed during Drive scope request:', error)
           resolve(false)
         }
       },
-      error_callback: (error: google.accounts.oauth2.CodeError) => {
+      error_callback: (error: google.accounts.oauth2.TokenError) => {
         log.error('Drive scope request error:', error)
         resolve(false)
       },
@@ -558,7 +506,7 @@ export async function requestDriveScope(): Promise<boolean> {
 
     // Request with consent prompt to ensure the user sees the new scope
     ensureOpenPatched()
-    client.requestCode({ prompt: 'consent', state })
+    client.requestAccessToken({ prompt: 'consent', state })
   })
 }
 

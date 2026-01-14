@@ -32,6 +32,8 @@ declare namespace google.accounts.oauth2 {
     error?: string
     error_description?: string
     error_uri?: string
+    /** State parameter echoed back */
+    state?: string
   }
 
   interface TokenError {
