@@ -15,7 +15,6 @@ import {
 } from '../services/auth'
 import type { AuthState } from '../types/auth'
 import { isFixtureMode } from '../utils/env'
-import { log } from '../utils/logger'
 import {
   buildOAuthRedirectUrl,
   clearHashFromUrl,
