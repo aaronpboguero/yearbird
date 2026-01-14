@@ -15,16 +15,10 @@
  */
 
 import { log } from './logger'
-import { generateCodeChallenge, generateCodeVerifier, generateState } from './pkce'
+import { generateState } from './pkce'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const OAUTH_STATE_KEY = 'yearbird:oauthState'
-const CODE_VERIFIER_KEY = 'yearbird:codeVerifier'
-
-export interface AuthCodeData {
-  code: string
-  state: string
-}
 
 export interface OAuthError {
   error: string
@@ -61,31 +55,6 @@ function consumeOAuthState(): string | null {
   }
 }
 
-/**
- * Stores the PKCE code verifier in sessionStorage (survives redirect).
- */
-function storeCodeVerifier(verifier: string): void {
-  try {
-    sessionStorage.setItem(CODE_VERIFIER_KEY, verifier)
-  } catch (error) {
-    log.debug('Storage access error storing code verifier:', error)
-  }
-}
-
-/**
- * Retrieves and clears the stored PKCE code verifier.
- * Returns null if not found or storage unavailable.
- */
-export function consumeCodeVerifier(): string | null {
-  try {
-    const verifier = sessionStorage.getItem(CODE_VERIFIER_KEY)
-    sessionStorage.removeItem(CODE_VERIFIER_KEY)
-    return verifier
-  } catch (error) {
-    log.debug('Storage access error consuming code verifier:', error)
-    return null
-  }
-}
 
 // ============================================================================
 // OAuth URL Building
@@ -111,19 +80,12 @@ export async function buildOAuthRedirectUrl(
   const state = generateState()
   storeOAuthState(state)
 
-  // PKCE: Generate and store verifier before redirect
-  const codeVerifier = generateCodeVerifier()
-  storeCodeVerifier(codeVerifier)
-  const codeChallenge = await generateCodeChallenge(codeVerifier)
-
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    response_type: 'code', // Authorization code flow (not implicit)
+    response_type: 'token', // Implicit flow
     scope,
     state, // CSRF protection - must be validated on callback
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
     include_granted_scopes: 'true',
     // Prompt user to select account (useful if they have multiple Google accounts)
     prompt: 'select_account',
@@ -131,41 +93,6 @@ export async function buildOAuthRedirectUrl(
   return `${GOOGLE_AUTH_URL}?${params.toString()}`
 }
 
-/**
- * Extracts the authorization code from the URL query parameters.
- *
- * After a successful OAuth redirect, Google returns the authorization code
- * in the URL query string like: ?code=xxx&state=xxx
- *
- * Validates the state parameter against the stored value to prevent CSRF attacks.
- * Returns null if state validation fails.
- *
- * @returns Auth code data if present and valid, null otherwise
- */
-export function extractCodeFromUrl(): AuthCodeData | null {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  const params = new URLSearchParams(window.location.search)
-  const code = params.get('code')
-  const returnedState = params.get('state')
-
-  if (!code) {
-    return null
-  }
-
-  // Validate state parameter to prevent CSRF attacks
-  // If we stored a state (initiated OAuth flow), callback MUST have matching state
-  const storedState = consumeOAuthState()
-  if (storedState && (!returnedState || returnedState !== storedState)) {
-    // State missing or mismatch - possible CSRF attack, reject the code
-    log.warn('OAuth state mismatch - possible CSRF attack')
-    return null
-  }
-
-  return { code, state: returnedState ?? '' }
-}
 
 /**
  * Extracts OAuth error information from the URL query parameters.
@@ -223,7 +150,7 @@ export function hasOAuthResponse(): boolean {
   }
 
   const params = new URLSearchParams(window.location.search)
-  return params.has('code') || params.has('error')
+  return params.has('error')
 }
 
 // ============================================================================

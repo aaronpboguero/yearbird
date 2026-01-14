@@ -11,8 +11,8 @@ import {
   storeAuth,
   CLIENT_ID,
   ALL_SCOPES,
+  type TokenResponse,
 } from '../services/auth'
-import { exchangeCodeForToken, type TokenResponse } from '../services/tokenExchange'
 import type { AuthState } from '../types/auth'
 import { isFixtureMode } from '../utils/env'
 import { log } from '../utils/logger'
@@ -20,8 +20,6 @@ import {
   buildOAuthRedirectUrl,
   clearHashFromUrl,
   clearQueryFromUrl,
-  consumeCodeVerifier,
-  extractCodeFromUrl,
   extractErrorFromHash,
   extractErrorFromUrl,
   extractTokenFromHash,
@@ -54,7 +52,6 @@ interface InitialAuthResult {
   isReady: boolean
   authNotice: string | null
   handledOAuthCallback: boolean
-  pendingCodeExchange: { code: string; codeVerifier: string; redirectUri: string } | null
 }
 
 const getInitialAuthState = (fixtureMode: boolean): InitialAuthResult => {
@@ -64,7 +61,6 @@ const getInitialAuthState = (fixtureMode: boolean): InitialAuthResult => {
       isReady: true,
       authNotice: null,
       handledOAuthCallback: false,
-      pendingCodeExchange: null,
     }
   }
 
@@ -84,36 +80,9 @@ const getInitialAuthState = (fixtureMode: boolean): InitialAuthResult => {
           ? 'Sign-in cancelled. Try again when ready.'
           : `Sign-in failed: ${oauthError.errorDescription ?? oauthError.error}`,
       handledOAuthCallback: true,
-      pendingCodeExchange: null,
     }
   }
 
-  // Check for authorization code in URL query (auth code flow)
-  const codeData = extractCodeFromUrl()
-  if (codeData) {
-    const redirectUri = window.location.origin + window.location.pathname
-    const codeVerifier = consumeCodeVerifier()
-    clearQueryFromUrl()
-
-    // If no code verifier, the OAuth flow is incomplete (possible page refresh or attack)
-    if (!codeVerifier) {
-      return {
-        authState: EMPTY_STATE,
-        isReady: true,
-        authNotice: 'Sign-in failed: Missing code verifier. Please try again.',
-        handledOAuthCallback: true,
-        pendingCodeExchange: null,
-      }
-    }
-
-    return {
-      authState: EMPTY_STATE, // Will be updated after code exchange
-      isReady: false,
-      authNotice: null,
-      handledOAuthCallback: true,
-      pendingCodeExchange: { code: codeData.code, codeVerifier, redirectUri },
-    }
-  }
 
   // Check for OAuth token in URL hash (legacy implicit flow - kept for backwards compat)
   const tokenData = extractTokenFromHash()
@@ -130,7 +99,6 @@ const getInitialAuthState = (fixtureMode: boolean): InitialAuthResult => {
       isReady: true,
       authNotice: null,
       handledOAuthCallback: true,
-      pendingCodeExchange: null,
     }
   }
 
@@ -147,7 +115,6 @@ const getInitialAuthState = (fixtureMode: boolean): InitialAuthResult => {
       isReady: false,
       authNotice: null,
       handledOAuthCallback: false,
-      pendingCodeExchange: null,
     }
   }
 
@@ -156,7 +123,6 @@ const getInitialAuthState = (fixtureMode: boolean): InitialAuthResult => {
     isReady: false,
     authNotice: null,
     handledOAuthCallback: false,
-    pendingCodeExchange: null,
   }
 }
 
@@ -176,41 +142,6 @@ export function useAuth() {
   // Track if GIS is unavailable (typed flag instead of string matching)
   const [isGisUnavailable, setIsGisUnavailable] = useState(false)
 
-  // Handle pending authorization code exchange (TV mode redirect flow)
-  useEffect(() => {
-    if (fixtureMode || !initialResult.pendingCodeExchange) {
-      return
-    }
-
-    const { code, codeVerifier, redirectUri } = initialResult.pendingCodeExchange
-
-    // Exchange the authorization code for tokens
-    exchangeCodeForToken({
-      code,
-      codeVerifier,
-      redirectUri,
-    })
-      .then((tokenResponse) => {
-        const expiresAt = storeAuth(
-          tokenResponse.access_token,
-          tokenResponse.expires_in,
-          tokenResponse.scope,
-        )
-        setAuthState({
-          isAuthenticated: true,
-          user: null,
-          accessToken: tokenResponse.access_token,
-          expiresAt,
-        })
-        setIsReady(true)
-        setAuthNotice(null)
-      })
-      .catch((error) => {
-        log.error('Token exchange failed:', error)
-        setAuthNotice('Sign-in failed. Please try again.')
-        setIsReady(true)
-      })
-  }, [fixtureMode, initialResult.pendingCodeExchange])
 
   useEffect(() => {
     if (fixtureMode) {

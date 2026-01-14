@@ -5,7 +5,7 @@ export interface TokenResponse {
   scope: string
   token_type: string
 }
-import { generateCodeVerifier, generateState } from '../utils/pkce'
+import { generateState } from '../utils/pkce'
 import { log } from '../utils/logger'
 
 /** Google OAuth client ID from environment */
@@ -73,7 +73,6 @@ const isGoogleReady = () => typeof google !== 'undefined' && Boolean(google.acco
 const POPUP_URL_HINT = 'accounts.google.com'
 
 // Re-export PKCE functions for backward compatibility
-export { generateCodeVerifier } from '../utils/pkce'
 export { generateCodeChallenge } from '../utils/pkce'
 
 /**
